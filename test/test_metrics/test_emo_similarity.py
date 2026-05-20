@@ -146,7 +146,7 @@ def test_emotion_metric_metadata():
     metadata = metric.get_metadata()
 
     assert metadata.name == "emotion"
-    assert metadata.category.value == "dependent"
+    assert metadata.category.value == "non_match"
     assert metadata.metric_type.value == "float"
     assert metadata.requires_reference is True
     assert metadata.requires_text is False

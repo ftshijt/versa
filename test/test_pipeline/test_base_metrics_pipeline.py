@@ -546,10 +546,10 @@ def test_squim_pipeline_with_registry_and_mocked_models(monkeypatch):
     )
 
     assert score_info
-    assert score_info[0]["torch_squim_stoi"] == 0.6
-    assert score_info[0]["torch_squim_pesq"] == 1.2
-    assert score_info[0]["torch_squim_si_sdr"] == -3.4
-    assert score_info[0]["torch_squim_mos"] == 4.2
+    assert score_info[0]["torch_squim_stoi"] == pytest.approx(0.6)
+    assert score_info[0]["torch_squim_pesq"] == pytest.approx(1.2)
+    assert score_info[0]["torch_squim_si_sdr"] == pytest.approx(-3.4)
+    assert score_info[0]["torch_squim_mos"] == pytest.approx(4.2)
 
 
 def test_vad_pipeline_with_registry_and_mocked_model(monkeypatch):
@@ -756,7 +756,7 @@ def test_wer_pipeline_with_registry_and_mocked_models(monkeypatch):
     )
     monkeypatch.setattr(
         "versa.corpus_metrics.whisper_wer.whisper_levenshtein_metric",
-        lambda wer_utils, pred_x, ref_text, fs=16000, cache_pred_text=None, cache_pred_language=None: {
+        lambda wer_utils, pred_x, ref_text, fs=16000, cache_pred_text=None, cache_pred_language=None, **kwargs: {
             "whisper_hyp_text": cache_pred_text or ref_text,
             "whisper_wer_equal": 1,
         },

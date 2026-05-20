@@ -173,11 +173,19 @@ def main():
             and score_metadata[config["name"]].category == MetricCategory.DISTRIBUTIONAL
         )
     ]
+    utterance_score_config = [
+        config
+        for config in score_config
+        if not (
+            score_metadata[config["name"]]
+            and score_metadata[config["name"]].category == MetricCategory.DISTRIBUTIONAL
+        )
+    ]
 
     if args.scoring_mode == "metric":
         score_info = scorer.score_utterances_by_metric(
             gen_files,
-            score_config,
+            utterance_score_config,
             gt_files,
             text_info,
             output_file=args.output_file,
@@ -192,7 +200,7 @@ def main():
     else:
         # Load utterance-level metrics
         utterance_metrics = scorer.load_metrics(
-            score_config,
+            utterance_score_config,
             use_gt=(True if gt_files is not None else False),
             use_gt_text=(True if text_info is not None else False),
             use_gpu=args.use_gpu,

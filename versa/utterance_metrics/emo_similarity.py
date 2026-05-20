@@ -131,7 +131,7 @@ class Emo2vecMetric(BaseMetric):
         """Return Emotion metric metadata."""
         return MetricMetadata(
             name="emotion",
-            category=MetricCategory.DEPENDENT,
+            category=MetricCategory.NON_MATCH,
             metric_type=MetricType.FLOAT,
             requires_reference=True,
             requires_text=False,
@@ -148,7 +148,7 @@ def register_emo2vec_metric(registry):
     """Register Emotion metric with the registry."""
     metric_metadata = MetricMetadata(
         name="emotion",
-        category=MetricCategory.DEPENDENT,
+        category=MetricCategory.NON_MATCH,
         metric_type=MetricType.FLOAT,
         requires_reference=True,
         requires_text=False,

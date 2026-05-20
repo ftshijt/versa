@@ -243,7 +243,7 @@ class NoresqaMetric(BaseMetric):
 
         return MetricMetadata(
             name=metric_name,
-            category=MetricCategory.DEPENDENT,
+            category=MetricCategory.NON_MATCH,
             metric_type=MetricType.FLOAT,
             requires_reference=True,
             requires_text=False,
@@ -267,7 +267,7 @@ def register_noresqa_metric(registry):
 
         metric_metadata = MetricMetadata(
             name=metric_name,
-            category=MetricCategory.DEPENDENT,
+            category=MetricCategory.NON_MATCH,
             metric_type=MetricType.FLOAT,
             requires_reference=True,
             requires_text=False,

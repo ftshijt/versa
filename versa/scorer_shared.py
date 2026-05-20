@@ -83,6 +83,15 @@ def load_score_modules(
     """Legacy wrapper for loading utterance-level scoring modules."""
     assert score_config, "no scoring function is provided"
     scorer = VersaScorer(_create_populated_registry())
+    score_config = [
+        config
+        for config in score_config
+        if not (
+            scorer.registry.get_metadata(config["name"])
+            and scorer.registry.get_metadata(config["name"]).category
+            == MetricCategory.DISTRIBUTIONAL
+        )
+    ]
     return scorer.load_metrics(
         score_config,
         use_gt=use_gt,
@@ -118,85 +127,6 @@ def list_scoring(
 def load_summary(score_info: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Legacy alias for summary computation."""
     return compute_summary(score_info)
-
-
-def load_corpus_modules(
-    score_config: List[Dict[str, Any]],
-    use_gpu: bool = False,
-    cache_folder: Optional[str] = None,
-    io: str = "kaldi",
-) -> Dict[str, Any]:
-    """Legacy wrapper for loading corpus-level scoring modules."""
-    assert score_config, "no scoring function is provided"
-    score_modules = {}
-    logger = logging.getLogger(__name__)
-
-    for config in score_config:
-        metric_name = config["name"]
-        try:
-            if metric_name == "fad":
-                from versa.corpus_metrics.fad import fad_setup
-
-                cache_dir = config.get(
-                    "cache_dir",
-                    f"{cache_folder}/fad" if cache_folder else "versa_cache/fad",
-                )
-                score_modules["fad"] = fad_setup(
-                    baseline=None,
-                    fad_embedding=config.get("fad_embedding", "default"),
-                    cache_dir=cache_dir,
-                    use_inf=config.get("use_inf", True),
-                    io=config.get("io", io),
-                )
-            elif metric_name == "kid":
-                from versa.corpus_metrics.kid import kid_setup
-
-                cache_dir = config.get(
-                    "cache_dir",
-                    f"{cache_folder}/kid" if cache_folder else "versa_cache/kid",
-                )
-                score_modules["kid"] = kid_setup(
-                    baseline=None,
-                    kid_embedding=config.get(
-                        "kid_embedding", config.get("fad_embedding", "default")
-                    ),
-                    cache_dir=cache_dir,
-                    use_inf=config.get("use_inf", True),
-                    io=config.get("io", io),
-                )
-        except Exception as e:
-            logger.error("Failed to load corpus metric %s: %s", metric_name, e)
-
-    return score_modules
-
-
-def corpus_scoring(
-    pred_x: str,
-    score_modules: Dict[str, Any],
-    baseline: Optional[str] = None,
-    output_file: Optional[str] = None,
-) -> Dict[str, Any]:
-    """Legacy wrapper for scoring corpus-level metrics."""
-    score_info = {}
-
-    for metric_name, module_info in score_modules.items():
-        if baseline is not None:
-            module_info["baseline"] = baseline
-
-        if metric_name == "fad":
-            from versa.corpus_metrics.fad import fad_scoring
-
-            score_info.update(fad_scoring(pred_x, module_info, key_info="fad"))
-        elif metric_name == "kid":
-            from versa.corpus_metrics.kid import kid_scoring
-
-            score_info.update(kid_scoring(pred_x, module_info, key_info="kid"))
-
-    if output_file:
-        with open(output_file, "w") as f:
-            yaml.dump(score_info, f)
-
-    return score_info
 
 
 def _load_existing_jsonl_scores(
