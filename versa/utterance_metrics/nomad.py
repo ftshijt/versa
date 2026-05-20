@@ -115,7 +115,7 @@ class NomadMetric(BaseMetric):
         """Return NOMAD metric metadata."""
         return MetricMetadata(
             name="nomad",
-            category=MetricCategory.DEPENDENT,
+            category=MetricCategory.NON_MATCH,
             metric_type=MetricType.FLOAT,
             requires_reference=True,
             requires_text=False,
@@ -132,7 +132,7 @@ def register_nomad_metric(registry):
     """Register NOMAD metric with the registry."""
     metric_metadata = MetricMetadata(
         name="nomad",
-        category=MetricCategory.DEPENDENT,
+        category=MetricCategory.NON_MATCH,
         metric_type=MetricType.FLOAT,
         requires_reference=True,
         requires_text=False,
