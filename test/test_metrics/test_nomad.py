@@ -135,7 +135,9 @@ class TestNomadMetric:
 
     def test_initialization_without_nomad(self):
         """Test that initialization fails without nomad dependency."""
-        with patch("versa.utterance_metrics.nomad.NOMAD_AVAILABLE", False):
+        with patch("versa.utterance_metrics.nomad.NOMAD_AVAILABLE", False), patch(
+            "versa.utterance_metrics.nomad.Nomad", None
+        ):
             config = {"use_gpu": False, "model_cache": "test_cache"}
             with pytest.raises(ImportError, match="nomad is not installed"):
                 NomadMetric(config)
@@ -233,7 +235,7 @@ class TestNomadMetric:
 
             metadata = metric.get_metadata()
             assert metadata.name == "nomad"
-            assert metadata.category.value == "dependent"
+            assert metadata.category.value == "non_match"
             assert metadata.metric_type.value == "float"
             assert metadata.requires_reference
             assert not metadata.requires_text

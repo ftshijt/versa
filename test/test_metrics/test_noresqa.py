@@ -265,7 +265,7 @@ def test_noresqa_metric_metadata(metric_type):
 
     expected_name = "noresqa_mos" if metric_type == 1 else "noresqa_score"
     assert metadata.name == expected_name
-    assert metadata.category.value == "dependent"
+    assert metadata.category.value == "non_match"
     assert metadata.metric_type.value == "float"
     assert metadata.requires_reference is True
     assert metadata.requires_text is False

@@ -100,7 +100,16 @@ _optional_metric_import(
     ("ClapScoreMetric", "register_clap_score_metric"),
     "Please install frechet-audio-distance following tools/install_clap_score.sh",
 )
-# from versa.corpus_metrics.fad import FadMetric, register_fad_metric
+_optional_metric_import(
+    "versa.corpus_metrics.fad",
+    ("FadMetric", "register_fad_metric"),
+    "Please install FADTK following tools/install_fadtk.sh",
+)
+_optional_metric_import(
+    "versa.corpus_metrics.kid",
+    ("KidMetric", "register_kid_metric"),
+    "Please install FADTK following tools/install_fadtk.sh",
+)
 _optional_metric_import(
     "versa.corpus_metrics.owsm_wer",
     ("OwsmWerMetric", "register_owsm_wer_metric"),
@@ -132,8 +141,16 @@ _optional_metric_import(
     ("AudioBoxAestheticsMetric", "register_audiobox_aesthetics_metric"),
 )
 _optional_metric_import(
+    "versa.utterance_metrics.asvspoof_score",
+    ("ASVSpoofMetric", "register_asvspoof_metric"),
+)
+_optional_metric_import(
     "versa.utterance_metrics.emo_similarity",
     ("Emo2vecMetric", "register_emo2vec_metric"),
+)
+_optional_metric_import(
+    "versa.utterance_metrics.emo_vad",
+    ("EmoVadMetric", "register_emo_vad_metric"),
 )
 _optional_metric_import(
     "versa.utterance_metrics.nomad",

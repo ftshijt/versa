@@ -91,10 +91,7 @@ be updated as each metric is migrated.
 
 ### Corpus and Distributional Metrics
 
-- `versa/corpus_metrics/fad.py`
 - `versa/corpus_metrics/individual_fad.py`
-- `versa/corpus_metrics/kid.py`
-- `versa/corpus_metrics/clap_score.py`
 
 ### Already Migrated Examples
 
@@ -103,7 +100,10 @@ Use these as local references when migrating the remaining metrics:
 - `versa/sequence_metrics/mcd_f0.py`
 - `versa/sequence_metrics/signal_metric.py`
 - `versa/sequence_metrics/warpq.py`
+- `versa/corpus_metrics/clap_score.py`
 - `versa/corpus_metrics/espnet_wer.py`
+- `versa/corpus_metrics/fad.py`
+- `versa/corpus_metrics/kid.py`
 - `versa/corpus_metrics/owsm_wer.py`
 - `versa/corpus_metrics/whisper_wer.py`
 - `versa/utterance_metrics/log_wmse.py`
