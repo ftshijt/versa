@@ -15,14 +15,14 @@ import numpy as np
 import soundfile as sf
 import torch
 import yaml
+from versa.definition import MetricCategory
 from versa.scorer_shared import (
     audio_loader_setup,
-    corpus_scoring,
     list_scoring,
     load_audio,
-    load_corpus_modules,
     load_score_modules,
     load_summary,
+    VersaScorer,
     wav_normalize,
 )
 
@@ -57,7 +57,7 @@ def get_parser() -> argparse.Namespace:
         "--cache_folder", type=str, default=None, help="Path of cache saving"
     )
     parser.add_argument(
-        "--use_gpu", type=bool, default=False, help="whether to use GPU if it can"
+        "--use_gpu", action="store_true", help="whether to use GPU if it can"
     )
     parser.add_argument(
         "--io",
@@ -82,6 +82,14 @@ def get_parser() -> argparse.Namespace:
         "--no_match",
         action="store_true",
         help="Do not match the groundtruth and generated files.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume utterance scoring from an existing output_file by skipping "
+            "keys already present in the JSONL results."
+        ),
     )
 
     # ---------- NEW: chunking options ----------
@@ -285,6 +293,8 @@ def main():
 
     # In case of using `local` backend, all GPU will be visible to all process.
     if args.use_gpu:
+        if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
+            raise RuntimeError("--use_gpu was set, but no CUDA device is available")
         gpu_rank = args.rank % torch.cuda.device_count()
         torch.cuda.set_device(gpu_rank)
         logging.info(f"using device: cuda:{gpu_rank}")
@@ -352,7 +362,7 @@ def main():
         logging.info("The number of items (post-chunk) = %d", len(gen_files))
 
     with open(args.score_config, "r", encoding="utf-8") as f:
-        score_config = yaml.full_load(f)
+        score_config = yaml.safe_load(f)
 
     score_modules = load_score_modules(
         score_config,
@@ -369,16 +379,29 @@ def main():
             text_info,
             output_file=args.output_file,
             io=args.io,
+            resume=args.resume,
         )
         logging.info("Summary: %s", load_summary(score_info))
     else:
         logging.info("No utterance-level scoring function is provided.")
 
-    corpus_score_modules = load_corpus_modules(
-        score_config,
+    scorer = VersaScorer()
+    corpus_score_config = []
+    for config in score_config:
+        metadata = scorer.registry.get_metadata(config["name"])
+        if metadata is None or metadata.category != MetricCategory.DISTRIBUTIONAL:
+            continue
+        corpus_config = dict(config)
+        corpus_config.setdefault("io", args.io)
+        if args.cache_folder and "cache_dir" not in corpus_config:
+            corpus_config["cache_dir"] = str(Path(args.cache_folder) / config["name"])
+        corpus_score_config.append(corpus_config)
+
+    corpus_score_modules = scorer.load_metrics(
+        corpus_score_config,
+        use_gt=(True if args.gt is not None else False),
+        use_gt_text=(True if text_info is not None else False),
         use_gpu=args.use_gpu,
-        cache_folder=args.cache_folder,
-        io=args.io,
     )
     assert (
         len(corpus_score_modules) > 0 or len(score_modules) > 0
@@ -389,16 +412,18 @@ def main():
     # and ensure your corpus scorer supports directory inputs.
     if len(corpus_score_modules) > 0:
         pred_for_corpus = args.pred
+        gt_for_corpus = args.gt if args.gt is not None and not args.no_match else None
         if args.enable_chunking and chunk_tmp_dir is not None:
             # Optionally switch corpus to chunk directory:
             pred_for_corpus = str(chunk_tmp_dir / "pred")
             logging.info(f"Corpus scoring over chunk directory: {pred_for_corpus}")
+            gt_for_corpus = None
 
-        corpus_score_info = corpus_scoring(
+        corpus_score_info = scorer.score_corpus(
             pred_for_corpus,
             corpus_score_modules,
-            args.gt if (args.gt is not None and not args.enable_chunking) else None,
-            text_info if (text_info is not None and args.enable_chunking) else None,
+            gt_for_corpus,
+            text_info,
             output_file=(args.output_file + ".corpus") if args.output_file else None,
         )
         logging.info("Corpus Summary: %s", corpus_score_info)

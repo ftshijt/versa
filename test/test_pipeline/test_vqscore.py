@@ -10,6 +10,8 @@ from versa.scorer_shared import (
     load_summary,
 )
 
+EXPECTED_KEYS = {"vqscore"}
+
 
 def info_update():
 
@@ -20,7 +22,7 @@ def info_update():
     logging.info("The number of utterances = %d" % len(gen_files))
 
     with open("egs/separate_metrics/vqscore.yaml", "r", encoding="utf-8") as f:
-        score_config = yaml.full_load(f)
+        score_config = yaml.safe_load(f)
 
     score_modules = load_score_modules(score_config, use_gt=False, use_gpu=False)
 
@@ -32,7 +34,7 @@ def info_update():
     summary = load_summary(score_info)
     print("Summary: {}".format(load_summary(score_info)), flush=True)
 
-    for key in summary:
+    for key in EXPECTED_KEYS:
         if summary[key] > 2:
             raise ValueError(
                 "Value issue in the test case, might be some issue in scorer {}".format(

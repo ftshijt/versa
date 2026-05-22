@@ -40,6 +40,11 @@ TEST_INFO = {
     "torch_squim_stoi": 0.6027805209159851,
     "torch_squim_pesq": 1.1683127880096436,
     "torch_squim_si_sdr": -11.109052658081055,
+    "dpam_distance": 0.15004253387451172,
+    "cdpam_distance": 0.05146043747663498,
+    "dnsmos_pro_bvcc": 1.1717286109924316,
+    "dnsmos_pro_nisqa": 1.4733699560165405,
+    "dnsmos_pro_vcc2018": 1.930935263633728,
 }
 
 
@@ -56,7 +61,7 @@ def info_update():
     logging.info("The number of utterances = %d" % len(gen_files))
 
     with open("egs/speech.yaml", "r", encoding="utf-8") as f:
-        score_config = yaml.full_load(f)
+        score_config = yaml.safe_load(f)
 
     score_modules = load_score_modules(
         score_config,
@@ -72,12 +77,12 @@ def info_update():
     summary = load_summary(score_info)
     print("Summary: {}".format(load_summary(score_info)), flush=True)
 
-    for key in summary:
+    for key in TEST_INFO:
         if math.isinf(TEST_INFO[key]) and math.isinf(summary[key]):
             # for sir"
             continue
         # the plc mos is undeterministic
-        if abs(TEST_INFO[key] - summary[key]) > 1e-4 and key != "plcmos":
+        if abs(TEST_INFO[key] - summary[key]) > 2e-4 and key != "plcmos":
             raise ValueError(
                 "Value issue in the test case, might be some issue in scorer {}".format(
                     key

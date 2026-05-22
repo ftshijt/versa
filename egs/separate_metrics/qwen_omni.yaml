@@ -1,0 +1,54 @@
+# Metrics with Qwen2.5-Omni
+# Inference pipeline follows the Qwen2.5-Omni release:
+# https://github.com/QwenLM/Qwen2.5-Omni
+
+# 1. Speaker Characteristics
+- name: qwen_omni_speaker_count
+
+- name: qwen_omni_speaker_gender
+
+- name: qwen_omni_speaker_age
+
+- name: qwen_omni_speech_impairment
+
+# 2. Voice Properties
+- name: qwen_omni_voice_pitch
+
+- name: qwen_omni_pitch_range
+
+- name: qwen_omni_voice_type
+
+- name: qwen_omni_speech_volume_level
+
+# 3. Speech Content
+- name: qwen_omni_language
+
+- name: qwen_omni_speech_register
+
+- name: qwen_omni_vocabulary_complexity
+
+- name: qwen_omni_speech_purpose
+
+# 4. Speech Delivery
+- name: qwen_omni_speech_emotion
+
+- name: qwen_omni_speech_clarity
+
+- name: qwen_omni_speech_rate
+
+- name: qwen_omni_speaking_style
+
+- name: qwen_omni_laughter_crying
+
+# 5. Interaction Patterns
+- name: qwen_omni_overlapping_speech
+
+# 6. Recording Environment
+- name: qwen_omni_speech_background_environment
+
+- name: qwen_omni_recording_quality
+
+- name: qwen_omni_channel_type
+
+# 7. Singing
+- name: qwen_omni_singing_technique
