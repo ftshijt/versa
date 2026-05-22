@@ -10,7 +10,6 @@ SONGEVAL_DIR="$REPO_ROOT/versa_cache/SongEval"
 cd "$REPO_ROOT"
 
 "$PYTHON_BIN" -m pip install \
-    "librosa==0.11.0" \
     "muq==0.1.0" \
     "hydra-core==1.3.2" \
     "safetensors"

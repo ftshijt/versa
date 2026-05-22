@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 import torch
@@ -77,3 +79,19 @@ def test_songeval_setup_reports_missing_optional_dependencies(monkeypatch):
 
     with pytest.raises(ImportError, match="SongEval requires optional dependencies"):
         songeval.songeval_model_setup()
+
+
+@pytest.mark.real_model
+def test_songeval_real_model_inference():
+    if os.environ.get("VERSA_RUN_REAL_MODEL_TESTS") != "1":
+        pytest.skip("Set VERSA_RUN_REAL_MODEL_TESTS=1 to run real SongEval inference")
+
+    sample_rate = 24000
+    time = np.linspace(0, 2.0, sample_rate * 2, endpoint=False, dtype=np.float32)
+    audio = (0.1 * np.sin(2 * np.pi * 440.0 * time)).astype(np.float32)
+
+    model = songeval.songeval_model_setup(use_gpu=False)
+    scores = songeval.songeval_metric(model, audio, sample_rate)
+
+    assert set(scores) == {key for key, _ in songeval.SONGEVAL_OUTPUTS}
+    assert all(np.isfinite(value) for value in scores.values())
