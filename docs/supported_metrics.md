@@ -62,6 +62,7 @@ We include x mark if the metric is auto-installed in versa.
 | 55 | x | VQScore (Self-Supervised Speech Quality Estimation and Enhancement Using Only Clean Speech)  | vqscore | vqscore | [VQScore](https://github.com/JasonSWFu/VQscore) | [paper](https://arxiv.org/abs/2402.16321) |
 | 56 | x | Singing voice MOS  | pseudo_mos | singmos_pro |[singmos](https://github.com/South-Twilight/SingMOS) | [paper](https://arxiv.org/abs/2510.01812) |
 | 57 |   | SongEval (A Benchmark Dataset for Song Aesthetics Evaluation) | songeval | {songeval_coherence, songeval_musicality, songeval_memorability, songeval_clarity, songeval_naturalness} | [SongEval](https://github.com/ASLP-lab/SongEval) | [paper](https://arxiv.org/abs/2505.10793) |
+| 58 |   | Multivariate Probabilistic Assessment of Speech Quality | multigauss | multigauss_{mos,noi,col,dis,loud}, multigauss_covariance | [MultiGauss](https://github.com/fcumlin/MultiGauss) | [paper](https://arxiv.org/abs/2506.04890) |
 
 
 ### Dependent Metrics
