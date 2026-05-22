@@ -4,12 +4,10 @@ import os
 
 import yaml
 
-from versa.scorer_shared import (
-    find_files,
-    list_scoring,
-    load_score_modules,
-    load_summary,
-)
+from versa.scorer_shared import VersaScorer, compute_summary
+from versa.utils_shared import find_files
+from versa.definition import MetricRegistry
+from versa.utterance_metrics.emo_similarity import register_emo2vec_metric
 
 TEST_INFO = {
     "emotion_similarity": 0.9984976053237915,
@@ -29,9 +27,17 @@ def info_update():
     logging.info("The number of utterances = %d" % len(gen_files))
 
     with open("egs/separate_metrics/emo_similarity.yaml", "r", encoding="utf-8") as f:
-        score_config = yaml.full_load(f)
+        score_config = yaml.safe_load(f)
 
-    score_modules = load_score_modules(
+    # Create registry and register Emotion metric
+    registry = MetricRegistry()
+    register_emo2vec_metric(registry)
+
+    # Initialize VersaScorer with the populated registry
+    scorer = VersaScorer(registry)
+
+    # Load metrics using the new API
+    metric_suite = scorer.load_metrics(
         score_config,
         use_gt=(True if gt_files is not None else False),
         use_gpu=False,
@@ -39,13 +45,15 @@ def info_update():
 
     assert len(score_config) > 0, "no scoring function is provided"
 
-    score_info = list_scoring(
-        gen_files, score_modules, gt_files, output_file=None, io="soundfile"
+    # Score utterances using the new API
+    score_info = scorer.score_utterances(
+        gen_files, metric_suite, gt_files=gt_files, output_file=None, io="soundfile"
     )
-    summary = load_summary(score_info)
-    print("Summary: {}".format(load_summary(score_info)), flush=True)
 
-    for key in summary:
+    summary = compute_summary(score_info)
+    print("Summary: {}".format(summary), flush=True)
+
+    for key in TEST_INFO:
         if math.isinf(TEST_INFO[key]) and math.isinf(summary[key]):
             # for sir"
             continue

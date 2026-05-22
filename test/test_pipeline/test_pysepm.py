@@ -39,7 +39,7 @@ def info_update():
     logging.info("The number of utterances = %d" % len(gen_files))
 
     with open("egs/separate_metrics/pysepm.yaml", "r", encoding="utf-8") as f:
-        score_config = yaml.full_load(f)
+        score_config = yaml.safe_load(f)
 
     score_modules = load_score_modules(
         score_config,
@@ -55,7 +55,7 @@ def info_update():
     summary = load_summary(score_info)
     print("Summary: {}".format(load_summary(score_info)), flush=True)
 
-    for key in summary:
+    for key in TEST_INFO:
         if math.isinf(TEST_INFO[key]) and math.isinf(summary[key]):
             # for sir"
             continue

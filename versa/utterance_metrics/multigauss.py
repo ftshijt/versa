@@ -21,17 +21,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-import sys
 from pathlib import Path
-import librosa
 import numpy as np
+import sys
 import torch
 import torchaudio
+from versa.definition import BaseMetric, MetricCategory, MetricMetadata, MetricType
 
 MULTIGAUSS_DIR = (
     Path(__file__).parent.parent.parent / "tools" / "checkpoints" / "multigauss"
 )
-print(f"MULTIGAUSS_DIR: {MULTIGAUSS_DIR}")
 try:
     import gin
 
@@ -39,17 +38,17 @@ try:
     import model as model_lib
     from train import TrainingLoop
 except ImportError:
-    raise ImportError(
-        "MultiGauss is not set up. Please install the package via "
-        "`tools/install_multigauss.sh`"
-    )
+    gin = None
+    model_lib = None
+    TrainingLoop = None
 
 
 def _repeat_and_crop_to_length(
     waveform: torch.Tensor,
     target_length: int = 160_000,
 ) -> torch.Tensor:
-    """Repeates or crops the waveform to give it the target length."""
+    """Repeat or crop the waveform to give it the target length."""
+    waveform = waveform.flatten().unsqueeze(0)
     current_length = waveform.shape[-1]
     if current_length < target_length:
         num_repeats = target_length // current_length + 1
@@ -70,9 +69,15 @@ def multigauss_model_setup(
     Returns:
         models: The loaded models.
     """
+    if gin is None or model_lib is None or TrainingLoop is None:
+        raise ModuleNotFoundError(
+            "MultiGauss is not set up. Please install the package via "
+            "`tools/install_multigauss.sh`"
+        )
+
     device = "cuda" if use_gpu else "cpu"
     model_folder = MULTIGAUSS_DIR / "runs" / model_tag
-    print(f"Loading model from {model_folder}")
+    logger.info("Loading MultiGauss model from %s", model_folder)
     gin.clear_config()
     gin.external_configurable(TrainingLoop)
     gin.parse_config_file(model_folder / "config.gin", skip_unknown=True)
@@ -142,6 +147,52 @@ def multigauss_metric(models, pred_x, fs):
             covariance_prediction[0].cpu().numpy()
         )  # ["mos", "noi", "col", "dis", "loud"]
     return result
+
+
+class MultiGaussMetric(BaseMetric):
+    """Multivariate probabilistic speech quality assessment."""
+
+    def _setup(self):
+        self.model = multigauss_model_setup(
+            model_tag=self.config.get("model_tag", "probabilistic"),
+            cache_dir=self.config.get("cache_dir", "versa_cache"),
+            use_gpu=self.config.get("use_gpu", False),
+        )
+
+    def compute(self, predictions, references=None, metadata=None):
+        if predictions is None:
+            raise ValueError("Predicted signal must be provided")
+
+        fs = metadata.get("sample_rate", 16000) if metadata else 16000
+        return multigauss_metric(self.model, np.asarray(predictions), fs)
+
+    def get_metadata(self):
+        return _multigauss_metadata()
+
+
+def _multigauss_metadata():
+    return MetricMetadata(
+        name="multigauss",
+        category=MetricCategory.INDEPENDENT,
+        metric_type=MetricType.DICT,
+        requires_reference=False,
+        requires_text=False,
+        gpu_compatible=True,
+        auto_install=False,
+        dependencies=["gin", "torch", "torchaudio", "numpy"],
+        description="Multivariate probabilistic assessment of speech quality",
+        paper_reference="https://arxiv.org/abs/2506.04890",
+        implementation_source="https://github.com/fcumlin/MultiGauss",
+    )
+
+
+def register_multigauss_metric(registry):
+    """Register MultiGauss with the metric registry."""
+    registry.register(
+        MultiGaussMetric,
+        _multigauss_metadata(),
+        aliases=["MultiGauss", "multi_gauss"],
+    )
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ VERSA (Versatile Evaluation of Speech and Audio) is a comprehensive toolkit for 
 - **Comprehensive**: 90+ metrics covering perceptual quality, intelligibility, and technical measurements (check [full metrics documentation](https://github.com/wavlab-speech/versa/blob/main/docs/supported_metrics.md) for a complete list)
 - **Integrated**: Widely used in speech toolkits and challenges (check the [incomplete list of toolkits/challenges](https://github.com/wavlab-speech/versa/blob/main/docs/users.md) using versa)
 - **Flexible**: Support for various input formats (file paths, SCP files, Kaldi-style ARKs)
-- **Scalable**: Built-in support for distributed evaluation using Slurm
+- **Scalable**: Built-in support for distributed evaluation using Slurm, with resume support for interrupted scoring runs
 - **Visualizable**: Interactive visualization with VERSA results (check [our visualization guideline](https://github.com/wavlab-speech/versa/blob/main/docs/visualization.md))
 
 ## 🔍 Interactive Demo
@@ -40,25 +40,76 @@ cd versa
 pip install .
 ```
 
-or alternatively, without cloning: 
+The base install keeps dependency resolution light and includes the shared scorer
+runtime. Install optional groups for metrics that need larger model stacks or
+external toolkits:
+
+```bash
+pip install ".[audio,text,ml]"
+pip install ".[external]"  # Git/toolkit-backed metrics
+pip install ".[dev]"       # tests, linting, and formatting
+```
+
+or alternatively, without cloning:
+
 ```bash
 python -m pip install git+https://github.com/wavlab-speech/versa.git#egg=versa-speech-audio-toolkit --no-build-isolation
 ```
 ### Metric-Specific Dependencies
 
-VERSA aligns with original APIs provided by algorithm developers rather than redistributing models. The core package includes many metrics by default, but some require additional installation.
+VERSA aligns with original APIs provided by algorithm developers rather than redistributing models. The base package does not install every optional metric backend by default.
 
 For metrics marked without "x" in the "Auto-Install" column of our metrics tables, please use the installers provided in the `tools` directory.
+
+Some real model-backed tests and metrics also need checkpoint assets that are
+too large to keep in the package. Prepare those assets in a repo-visible cache
+before running the full real-model checks:
+
+```bash
+PYTHON=python tools/setup_huggingface_cache.sh
+```
+
+This populates `versa_cache/huggingface` and
+`versa_cache/discrete_speech_metrics`. To reuse an existing local Hugging Face
+cache without network access, run:
+
+```bash
+SOURCE_HF_CACHE="$HOME/.cache/huggingface/hub" \
+VERSA_HF_LOCAL_ONLY=1 \
+PYTHON=python \
+tools/setup_huggingface_cache.sh
+```
+
+### Installation Notes
+
+Some optional metric backends emit warnings during setup or first use. ESPnet may
+print a `flash_attn` warning when Flash Attention is not available; VERSA can
+still run metrics that do not require that backend. FADTK is only needed for
+FAD/KID-style metrics and can be installed with `tools/install_fadtk.sh` when
+those metrics are selected.
+
+If NLTK downloads fail with a certificate verification error, point Python at
+the certificate bundle used by `certifi` before running the tests:
+
+```bash
+export SSL_CERT_FILE=$(python -c "import certifi; print(certifi.where())")
+```
 
 
 ## 🧪 Quick Testing
 
 ```bash
-# Test core functionality
-python versa/test/test_pipeline/test_general.py
+# Test dependency-light core functionality
+python -m pytest test/test_metrics/test_definition.py
 
 # Test specific metrics that require additional installation
-python versa/test/test_pipeline/test_{metric}.py
+python -m pytest test/test_metrics/test_{metric}.py
+
+# Run real model-backed checks after preparing the visible model cache
+VERSA_RUN_REAL_MODEL_TESTS=1 \
+VERSA_HF_CACHE_DIR="$PWD/versa_cache/huggingface" \
+VERSA_DISCRETE_SPEECH_CACHE_DIR="$PWD/versa_cache/discrete_speech_metrics" \
+python -m pytest --import-mode=importlib test
 ```
 
 
@@ -69,7 +120,7 @@ python versa/test/test_pipeline/test_{metric}.py
 ```bash
 # Direct usage with file paths
 python versa/bin/scorer.py \
-    --score_config egs/speech.yaml \
+    --score_config egs/speech_cpu.yaml \
     --gt test/test_samples/test1 \
     --pred test/test_samples/test2 \
     --output_file test_result \
@@ -77,7 +128,7 @@ python versa/bin/scorer.py \
 
 # With SCP-style input
 python versa/bin/scorer.py \
-    --score_config egs/speech.yaml \
+    --score_config egs/speech_cpu.yaml \
     --gt test/test_samples/test1.scp \
     --pred test/test_samples/test2.scp \
     --output_file test_result \
@@ -85,7 +136,7 @@ python versa/bin/scorer.py \
 
 # With Kaldi-ARK style input (compatible with ESPnet)
 python versa/bin/scorer.py \
-    --score_config egs/speech.yaml \
+    --score_config egs/speech_cpu.yaml \
     --gt test/test_samples/test1.scp \
     --pred test/test_samples/test2.scp \
     --output_file test_result \
@@ -93,13 +144,40 @@ python versa/bin/scorer.py \
   
 # Including text transcription information
 python versa/bin/scorer.py \
-    --score_config egs/separate_metrics/wer.yaml \
+    --score_config egs/separate_metrics/wer_tiny.yaml \
     --gt test/test_samples/test1.scp \
     --pred test/test_samples/test2.scp \
     --output_file test_result \
     --text test/test_samples/text \
     --io soundfile
+
+# Resume an interrupted utterance-level scoring run
+python versa/bin/scorer.py \
+    --score_config egs/speech_cpu.yaml \
+    --gt test/test_samples/test1.scp \
+    --pred test/test_samples/test2.scp \
+    --output_file test_result \
+    --io soundfile \
+    --resume
+
+# Load and score one metric at a time to reduce peak GPU memory
+python versa/bin/scorer.py \
+    --score_config egs/speech_gpu.yaml \
+    --gt test/test_samples/test1.scp \
+    --pred test/test_samples/test2.scp \
+    --output_file test_result \
+    --io soundfile \
+    --use_gpu True \
+    --scoring_mode metric
 ```
+
+`--resume` reads existing JSONL rows from `--output_file`, skips utterance keys
+that have already been scored, and appends only new results. This is useful for
+long-running evaluations that are interrupted or restarted.
+
+`--scoring_mode metric` loads and runs one metric at a time, then releases
+metric resources before moving to the next metric. This can reduce peak GPU
+memory when many model-backed metrics are configured together.
 
 ### Distributed Evaluation with Slurm
 

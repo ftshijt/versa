@@ -4,12 +4,7 @@ import os
 
 import yaml
 
-from versa.scorer_shared import (
-    corpus_scoring,
-    find_files,
-    load_corpus_modules,
-    load_summary,
-)
+from versa.scorer_shared import VersaScorer
 
 TEST_INFO = {
     "fad_overall": 0.00753398077542222,
@@ -20,26 +15,19 @@ TEST_INFO = {
 def info_update():
 
     with open("egs/separate_metrics/fad.yaml", "r", encoding="utf-8") as f:
-        score_config = yaml.full_load(f)
-
-    score_modules = load_corpus_modules(
-        score_config,
-        use_gpu=False,
-        cache_folder="versa_cache",
-        io="dir",
-    )
+        score_config = yaml.safe_load(f)
 
     assert len(score_config) > 0, "no scoring function is provided"
 
-    score_info = corpus_scoring(
+    scorer = VersaScorer()
+    score_info = scorer.score_corpus(
         "test/test_samples/test2",
-        score_modules,
+        scorer.load_metrics([{**score_config[0], "io": "dir"}], use_gt=True),
         "test/test_samples/test1",
-        output_file=None,
     )
     print("Summary: {}".format(score_info), flush=True)
 
-    for key in score_info:
+    for key in TEST_INFO:
         if math.isinf(TEST_INFO[key]) and math.isinf(score_info[key]):
             # for sir"
             continue
@@ -52,21 +40,14 @@ def info_update():
             )
     print("check dir IO successful", flush=True)
 
-    score_modules = load_corpus_modules(
-        score_config,
-        use_gpu=False,
-        cache_folder="versa_cache",
-        io="kaldi",
-    )
-    score_info = corpus_scoring(
+    score_info = scorer.score_corpus(
         "test/test_samples/test2.scp",
-        score_modules,
+        scorer.load_metrics([{**score_config[0], "io": "kaldi"}], use_gt=True),
         "test/test_samples/test1.scp",
-        output_file=None,
     )
     print("Summary: {}".format(score_info), flush=True)
 
-    for key in score_info:
+    for key in TEST_INFO:
         if math.isinf(TEST_INFO[key]) and math.isinf(score_info[key]):
             # for sir"
             continue
@@ -79,21 +60,14 @@ def info_update():
             )
     print("check kaldi IO successful", flush=True)
 
-    score_modules = load_corpus_modules(
-        score_config,
-        use_gpu=False,
-        cache_folder="versa_cache",
-        io="soundfile",
-    )
-    score_info = corpus_scoring(
+    score_info = scorer.score_corpus(
         "test/test_samples/test2.scp",
-        score_modules,
+        scorer.load_metrics([{**score_config[0], "io": "soundfile"}], use_gt=True),
         "test/test_samples/test1.scp",
-        output_file=None,
     )
     print("Summary: {}".format(score_info), flush=True)
 
-    for key in score_info:
+    for key in TEST_INFO:
         if math.isinf(TEST_INFO[key]) and math.isinf(score_info[key]):
             # for sir"
             continue
