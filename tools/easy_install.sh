@@ -10,6 +10,7 @@ set -eou pipefail
 . ./install_scoreq.sh || echo "error in scoreq"
 . ./install_log_wmse.sh || echo "error in log_wmse"
 . ./install_vqscore.sh || echo "error in vqscore"
+. ./install_songeval.sh || echo "error in songeval"
 . ./install_nomad.sh || echo "error in nomad"
 . ./install_asvspoof.sh || echo "error in asvspoof"
 . ./install_pysepm.sh || echo "error in pysepm"

@@ -240,6 +240,11 @@ _optional_metric_import(
     ("VqscoreMetric", "register_vqscore_metric"),
 )
 _optional_metric_import(
+    "versa.utterance_metrics.songeval",
+    ("SongEvalMetric", "register_songeval_metric"),
+    "Please install SongEval dependencies following tools/install_songeval.sh",
+)
+_optional_metric_import(
     "versa.utterance_metrics.vad",
     ("VadMetric", "register_vad_metric"),
 )
