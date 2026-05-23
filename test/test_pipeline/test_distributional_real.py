@@ -98,3 +98,39 @@ def test_kid_pipeline_with_real_samples(tmp_path):
     for key, value in score_info.items():
         assert key.startswith("kid")
         assert isinstance(value, float)
+
+
+@pytest.mark.real_model
+@pytest.mark.skipif(
+    not RUN_REAL_MODEL_TESTS,
+    reason="Set VERSA_RUN_REAL_MODEL_TESTS=1 to run real sample-backed checks",
+)
+@pytest.mark.skipif(
+    not _fadtk_is_available(),
+    reason="FADTK is not installed; run tools/install_fadtk.sh first",
+)
+def test_individual_fad_pipeline_with_real_samples(tmp_path):
+    """Run individual FAD through the registry/scorer path with real sample audio."""
+    pred, ref = _sample_pair()
+    scorer = VersaScorer()
+    suite = scorer.load_metrics(
+        [
+            {
+                "name": "individual_fad",
+                "io": "soundfile",
+                "cache_dir": str(tmp_path / "individual_fad"),
+            }
+        ],
+        use_gt=True,
+    )
+
+    score_info = scorer.score_corpus(
+        {"sample": pred},
+        suite,
+        {"baseline": ref},
+    )
+
+    assert set(score_info) == {"individual_fad"}
+    assert set(score_info["individual_fad"]) == {"sample"}
+    assert isinstance(score_info["individual_fad"]["sample"], float)
+    assert math.isfinite(score_info["individual_fad"]["sample"])

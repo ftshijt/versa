@@ -125,10 +125,11 @@ We include x mark if the metric is auto-installed in versa.
 |Number| Auto-Install | Metric Name  (Auto-Install)  | Key in config | Key in report |  Code Source                                                                                                     | References                                                                                       |
 |---|---|------------------|---------------|---------------|-----------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
 | 1 |   | Frechet Audio Distance (FAD) | fad | fad | [fadtk](https://github.com/microsoft/fadtk) | [paper](https://arxiv.org/abs/1812.08466) |
-| 2 |   | Kullback-Leibler Divergence on Embedding Distribution | kl_embedding | kl_embedding | [Stability-AI](https://github.com/Stability-AI/stable-audio-metrics) |  |
-| 3 |   | Audio Density Score | audio_density_coverage | audio_density | [Sony-audio-metrics](https://github.com/SonyCSLParis/audio-metrics) | [paper](https://arxiv.org/abs/2002.09797) |
-| 4 |   | Audio Coverage Score | audio_density_coverage | audio_coverage | [Sony-audio-metrics](https://github.com/SonyCSLParis/audio-metrics) | [paper](https://arxiv.org/abs/2002.09797) |
-| 5 |  | KID : Kernel Distance Metric for Audio/Music Quality | kid | kid_mean, kid_std | [KID](https://github.com/SonyCSLParis/audio-metrics/tree/main) | [Paper](https://arxiv.org/abs/1812.08466)|
+| 2 |   | Individual Frechet Audio Distance | individual_fad | individual_fad | [fadtk](https://github.com/ftshijt/fadtk) | [paper](https://arxiv.org/abs/1812.08466) |
+| 3 |   | Kullback-Leibler Divergence on Embedding Distribution | kl_embedding | kl_embedding | [Stability-AI](https://github.com/Stability-AI/stable-audio-metrics) |  |
+| 4 |   | Audio Density Score | audio_density_coverage | audio_density | [Sony-audio-metrics](https://github.com/SonyCSLParis/audio-metrics) | [paper](https://arxiv.org/abs/2002.09797) |
+| 5 |   | Audio Coverage Score | audio_density_coverage | audio_coverage | [Sony-audio-metrics](https://github.com/SonyCSLParis/audio-metrics) | [paper](https://arxiv.org/abs/2002.09797) |
+| 6 |  | KID : Kernel Distance Metric for Audio/Music Quality | kid | kid_mean, kid_std | [KID](https://github.com/SonyCSLParis/audio-metrics/tree/main) | [Paper](https://arxiv.org/abs/1812.08466)|
 
 ## Acknowledgement
 We sincerely thank all the open-source implementations listed in https://github.com/shinjiwlab/versa/tree/main#list-of-metrics 

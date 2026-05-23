@@ -1,0 +1,7 @@
+# Individual Frechet Audio Distance (individual_fad)
+# --individual_fad: mapping from prediction key to per-file FAD against baseline
+# Uses the same FADTK embedding options as fad.yaml.
+- name: individual_fad
+  fad_embedding: default
+  cache_dir: versa_cache/individual_fad
+  io: kaldi

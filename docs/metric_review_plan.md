@@ -44,13 +44,11 @@ These items need metadata or docs attention separate from implementation shape.
 | `kid` | Distributional docs row had malformed table columns. | Fixed in `docs/supported_metrics.md`. |
 | Auto-install marks | Several metrics rely on optional groups, model downloads, or external installers. | Still requires periodic review against `pyproject.toml` and installer scripts before releases. |
 
-## Migration Required
+## Migration Settled
 
-| Metric | Required migration work | Status |
-| --- | --- | --- |
-| `fad` | Add `BaseMetric`, `MetricMetadata`, registry integration, distributional scorer compatibility, and tests while preserving `fad_overall` and `fad_r2`. | Implemented through `FadMetric`; legacy setup/scoring helpers were removed. |
-| `kid` | Add `BaseMetric`, `MetricMetadata`, registry integration, distributional scorer compatibility, guarded FADTK import, and tests while preserving KID output keys. | Implemented through `KidMetric`; legacy setup/scoring helpers were removed. |
-| `individual_fad` | Empty placeholder module with no implementation, metadata, docs, example, or tests. | Leave unregistered; decide in a future issue whether to remove it or implement a real metric. |
+The metric object-oriented migration is complete for maintained metric modules.
+FAD, individual FAD, and KID now use `BaseMetric`, `MetricMetadata`, registry
+integration, and distributional scorer tests.
 
 ## Needs Real-Model Verification
 
@@ -69,7 +67,7 @@ checkpoints, and licenses.
 
 Keep these checks as the minimum review checklist for future metric work:
 
-- Every importable metric module has a `BaseMetric` subclass, or is explicitly documented as pending/legacy.
+- Every importable metric module has a `BaseMetric` subclass; empty placeholders should be removed instead of documented as pending/legacy.
 - Every `register_*_metric` function is exposed through `versa/__init__.py`.
 - Every documented `Key in config` resolves through `MetricRegistry` as a canonical name or alias.
 - Every YAML name in `egs/separate_metrics` resolves through `MetricRegistry`.
