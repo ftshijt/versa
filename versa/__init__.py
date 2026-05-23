@@ -1,6 +1,7 @@
 import importlib
 import logging
 import os
+import sys
 from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version
 
@@ -15,9 +16,17 @@ os.environ.setdefault(
     "NUMBA_CACHE_DIR", str(Path.cwd() / "versa_cache" / "numba_cache")
 )
 
+_SKIP_OPTIONAL_METRIC_IMPORTS = any(
+    flag in sys.argv
+    for flag in ("--list-metrics", "--describe-metric", "--recommend-config")
+)
+
 
 def _optional_metric_import(module_name, names, install_hint=None):
     """Import optional metric symbols without making package import fail."""
+    if _SKIP_OPTIONAL_METRIC_IMPORTS:
+        return
+
     try:
         module = importlib.import_module(module_name)
     except ImportError:

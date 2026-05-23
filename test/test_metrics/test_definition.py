@@ -13,6 +13,12 @@ from versa.definition import (
     MetricSuite,
     MetricType,
 )
+from versa.metric_discovery import (
+    create_metric_discovery_registry,
+    describe_metric,
+    format_metric_list,
+    recommend_config,
+)
 from versa.scorer_shared import VersaScorer, compute_summary
 from versa.utils_shared import find_files
 
@@ -62,6 +68,40 @@ def test_metric_factory_create_suite_with_missing_dependency_and_default_config(
     suite = MetricFactory(registry).create_metric_suite(["dummy"])
 
     assert suite.compute_all(predictions=None) == {"dummy": {"dummy": 1.0}}
+
+
+def test_metric_registry_lists_aliases_for_metric():
+    registry = MetricRegistry()
+    registry.register(DummyMetric, DUMMY_METADATA, aliases=["dummy_alias"])
+
+    assert registry.get_aliases("dummy") == ["dummy_alias"]
+    assert registry.get_aliases("dummy_alias") == ["dummy_alias"]
+    assert registry.list_aliases() == {"dummy_alias": "dummy"}
+
+
+def test_metric_discovery_describes_metric_without_instantiating_backend():
+    registry = create_metric_discovery_registry()
+
+    assert "pesq" in registry.list_metrics()
+    assert "PESQ: Perceptual Evaluation" in describe_metric(registry, "pesq")
+
+
+def test_metric_discovery_formats_filtered_list():
+    registry = create_metric_discovery_registry()
+
+    output = format_metric_list(registry)
+
+    assert "name" in output
+    assert "pesq" in output
+    assert "metric(s) available" in output
+
+
+def test_metric_discovery_recommends_tts_gpu_config():
+    output = recommend_config("tts", "gpu")
+
+    assert "task=tts, device=gpu" in output
+    assert "- name: discrete_speech" in output
+    assert "- name: whisper_wer" in output
 
 
 def test_metric_suite_compute_parallel_is_explicitly_unimplemented():
