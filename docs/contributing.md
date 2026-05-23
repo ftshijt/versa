@@ -1,8 +1,8 @@
 ## Contributor Guidelines
 
 This guide describes the current path for adding or updating a VERSA metric.
-For older function-style metrics that are being migrated, also see
-`docs/metric_migration.md`.
+All maintained metrics should use the object-oriented registry interface
+described below.
 
 ### Step 1: Choose the Metric Location
 

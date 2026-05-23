@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 
 from versa.corpus_metrics import fad as fad_module
 from versa.corpus_metrics import kid as kid_module
@@ -128,3 +129,14 @@ def test_load_score_modules_skips_distributional_metrics(monkeypatch):
     )
 
     assert len(suite.metrics) == 0
+
+
+def test_corpus_metrics_do_not_include_empty_placeholders():
+    corpus_metrics_dir = Path(__file__).parents[2] / "versa" / "corpus_metrics"
+    empty_modules = sorted(
+        path.name
+        for path in corpus_metrics_dir.glob("*.py")
+        if path.name != "__init__.py" and path.stat().st_size == 0
+    )
+
+    assert empty_modules == []
