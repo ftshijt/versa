@@ -106,6 +106,11 @@ _optional_metric_import(
     "Please install FADTK following tools/install_fadtk.sh",
 )
 _optional_metric_import(
+    "versa.corpus_metrics.individual_fad",
+    ("IndividualFadMetric", "register_individual_fad_metric"),
+    "Please install FADTK following tools/install_fadtk.sh",
+)
+_optional_metric_import(
     "versa.corpus_metrics.kid",
     ("KidMetric", "register_kid_metric"),
     "Please install FADTK following tools/install_fadtk.sh",

@@ -47,9 +47,8 @@ These items need metadata or docs attention separate from implementation shape.
 ## Migration Settled
 
 The metric object-oriented migration is complete for maintained metric modules.
-FAD and KID now use `BaseMetric`, `MetricMetadata`, registry integration, and
-distributional scorer tests. The empty `individual_fad` placeholder was removed
-instead of registering a non-functional metric name.
+FAD, individual FAD, and KID now use `BaseMetric`, `MetricMetadata`, registry
+integration, and distributional scorer tests.
 
 ## Needs Real-Model Verification
 
