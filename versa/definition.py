@@ -75,6 +75,19 @@ class MetricRegistry:
         real_name = self._aliases.get(name, name)
         return self._metadata.get(real_name)
 
+    def get_aliases(self, name: str) -> List[str]:
+        """Get aliases registered for a metric name or alias."""
+        real_name = self._aliases.get(name, name)
+        return sorted(
+            alias
+            for alias, metric_name in self._aliases.items()
+            if metric_name == real_name
+        )
+
+    def list_aliases(self) -> Dict[str, str]:
+        """List registered aliases mapped to canonical metric names."""
+        return dict(sorted(self._aliases.items()))
+
     def list_metrics(
         self, category: MetricCategory = None, metric_type: MetricType = None
     ) -> List[str]:

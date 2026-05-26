@@ -181,6 +181,29 @@ long-running evaluations that are interrupted or restarted.
 metric resources before moving to the next metric. This can reduce peak GPU
 memory when many model-backed metrics are configured together.
 
+### Metric Discovery
+
+Use the `versa-score` CLI to inspect available metrics and generate starter
+configs without reading the full metrics table manually:
+
+```bash
+# List metrics registered in the current environment
+versa-score --list-metrics
+
+# Show metadata, dependencies, references, and aliases for one metric
+versa-score --describe-metric pesq
+
+# Print a recommended YAML score config for a task/device pair
+versa-score --recommend-config --task tts --device gpu
+```
+
+`--list-metrics` also supports `--metric-category` and `--metric-type` filters,
+for example:
+
+```bash
+versa-score --list-metrics --metric-category dependent --metric-type float
+```
+
 ### Distributed Evaluation with Slurm
 
 ```bash

@@ -8,14 +8,14 @@
 import argparse
 import logging
 
-import torch
-import yaml
-
-from versa.definition import MetricCategory
-from versa.scorer_shared import (
-    audio_loader_setup,
-    VersaScorer,
-    compute_summary,
+from versa.metric_discovery import (
+    create_metric_discovery_registry,
+    describe_metric,
+    format_metric_list,
+    parse_metric_category,
+    parse_metric_type,
+    recommend_config,
+    supported_recommendation_tasks,
 )
 
 
@@ -93,11 +93,99 @@ def get_parser() -> argparse.Namespace:
             "reducing peak GPU memory when many metrics are configured."
         ),
     )
+    parser.add_argument(
+        "--list-metrics",
+        action="store_true",
+        help="List registered metrics and exit.",
+    )
+    parser.add_argument(
+        "--describe-metric",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help="Describe one metric by name or alias and exit.",
+    )
+    parser.add_argument(
+        "--recommend-config",
+        action="store_true",
+        help="Print a recommended YAML score config and exit.",
+    )
+    parser.add_argument(
+        "--task",
+        type=str,
+        default=None,
+        help=(
+            "Task for --recommend-config. Supported tasks: "
+            + ", ".join(supported_recommendation_tasks())
+        ),
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cpu",
+        choices=["cpu", "gpu"],
+        help="Target device for --recommend-config.",
+    )
+    parser.add_argument(
+        "--metric-category",
+        type=str,
+        default=None,
+        choices=["independent", "dependent", "non_match", "distributional"],
+        help="Filter --list-metrics by metric category.",
+    )
+    parser.add_argument(
+        "--metric-type",
+        type=str,
+        default=None,
+        choices=[
+            "string",
+            "float",
+            "int",
+            "bool",
+            "list",
+            "dict",
+            "tuple",
+            "array",
+            "time",
+        ],
+        help="Filter --list-metrics by output type.",
+    )
     return parser
 
 
 def main():
-    args = get_parser().parse_args()
+    parser = get_parser()
+    args = parser.parse_args()
+
+    if args.list_metrics or args.describe_metric or args.recommend_config:
+        try:
+            if args.list_metrics:
+                registry = create_metric_discovery_registry()
+                category = parse_metric_category(args.metric_category)
+                metric_type = parse_metric_type(args.metric_type)
+                print(format_metric_list(registry, category, metric_type))
+                return
+            if args.describe_metric:
+                registry = create_metric_discovery_registry()
+                print(describe_metric(registry, args.describe_metric))
+                return
+            if args.recommend_config:
+                if not args.task:
+                    parser.error("--recommend-config requires --task")
+                print(recommend_config(args.task, args.device))
+                return
+        except ValueError as e:
+            parser.error(str(e))
+
+    import torch
+
+    from versa.definition import MetricCategory
+    from versa.scorer_shared import (
+        audio_loader_setup,
+        VersaScorer,
+        compute_summary,
+    )
+    import yaml
 
     # In case of using `local` backend, all GPU will be visible to all process.
     if args.use_gpu:
