@@ -15,7 +15,6 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from versa.definition import MetricRegistry
 from versa.metric_discovery import create_metric_discovery_registry
 
-
 _BASE_CONFIG_KEYS = {"name", "use_gpu"}
 _GPU_REQUIRED_PREFIXES = ("qwen2_audio_", "qwen_omni_")
 _GPU_REQUIRED_METRICS = {"audiobox_aesthetics"}
@@ -99,7 +98,9 @@ def validate_score_config(
         metadata = registry.get_metadata(metric_name)
         metric_class = registry.get_metric(metric_name)
         if metadata is None:
-            discovery_registry = discovery_registry or create_metric_discovery_registry()
+            discovery_registry = (
+                discovery_registry or create_metric_discovery_registry()
+            )
             metadata = discovery_registry.get_metadata(metric_name)
             metric_class = discovery_registry.get_metric(metric_name)
         if metadata is None or metric_class is None:
