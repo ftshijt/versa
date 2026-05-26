@@ -213,6 +213,24 @@ def main():
         )
         logging.warning("Skip DEBUG/INFO messages")
 
+    with open(args.score_config, "r", encoding="utf-8") as f:
+        score_config = yaml.safe_load(f)
+
+    # Validate before any scoring or model setup begins.
+    scorer = VersaScorer()
+    try:
+        from versa.config_validation import validate_score_config
+
+        validate_score_config(
+            score_config,
+            registry=scorer.registry,
+            use_gt=(args.gt is not None and args.gt != "None" and not args.no_match),
+            use_gt_text=(args.text is not None),
+            use_gpu=args.use_gpu,
+        )
+    except ValueError as e:
+        parser.error(str(e))
+
     gen_files = audio_loader_setup(args.pred, args.io)
 
     # find reference file
@@ -244,11 +262,7 @@ def main():
 
     logging.info("The number of utterances = %d" % len(gen_files))
 
-    with open(args.score_config, "r", encoding="utf-8") as f:
-        score_config = yaml.safe_load(f)
-
     # Initialize VersaScorer
-    scorer = VersaScorer()
     score_metadata = {
         config["name"]: scorer.registry.get_metadata(config["name"])
         for config in score_config

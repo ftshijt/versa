@@ -13,6 +13,10 @@ from versa.definition import (
     MetricSuite,
     MetricType,
 )
+from versa.config_validation import (
+    ScoreConfigValidationException,
+    validate_score_config,
+)
 from versa.metric_discovery import (
     create_metric_discovery_registry,
     describe_metric,
@@ -39,7 +43,7 @@ calculate_average_wer = _load_calculate_average_wer()
 
 class DummyMetric(BaseMetric):
     def _setup(self):
-        pass
+        self.threshold = self.config.get("threshold", 0.5)
 
     def compute(self, predictions, references=None, metadata=None):
         return {"dummy": 1.0}
@@ -61,6 +65,12 @@ DUMMY_METADATA = MetricMetadata(
 )
 
 
+def _registry_with_dummy(metadata=DUMMY_METADATA):
+    registry = MetricRegistry()
+    registry.register(DummyMetric, metadata, aliases=["dummy_alias"])
+    return registry
+
+
 def test_metric_factory_create_suite_with_missing_dependency_and_default_config():
     registry = MetricRegistry()
     registry.register(DummyMetric, DUMMY_METADATA)
@@ -71,12 +81,82 @@ def test_metric_factory_create_suite_with_missing_dependency_and_default_config(
 
 
 def test_metric_registry_lists_aliases_for_metric():
-    registry = MetricRegistry()
-    registry.register(DummyMetric, DUMMY_METADATA, aliases=["dummy_alias"])
+    registry = _registry_with_dummy()
 
     assert registry.get_aliases("dummy") == ["dummy_alias"]
     assert registry.get_aliases("dummy_alias") == ["dummy_alias"]
     assert registry.list_aliases() == {"dummy_alias": "dummy"}
+
+
+def test_score_config_validation_accepts_known_alias_and_parameters():
+    metadata = MetricMetadata(
+        **{
+            **DUMMY_METADATA.__dict__,
+            "dependencies": [],
+        }
+    )
+    registry = _registry_with_dummy(metadata)
+
+    validate_score_config(
+        [{"name": "dummy_alias", "threshold": 0.75}],
+        registry=registry,
+    )
+
+
+def test_score_config_validation_reports_actionable_errors():
+    registry = _registry_with_dummy()
+    ref_text_metadata = MetricMetadata(
+        name="needs_ref_text",
+        category=MetricCategory.DEPENDENT,
+        metric_type=MetricType.FLOAT,
+        requires_reference=True,
+        requires_text=True,
+        gpu_compatible=False,
+        auto_install=False,
+        dependencies=[],
+        description="Needs reference audio and text.",
+    )
+    gpu_metadata = MetricMetadata(
+        name="qwen_omni_language",
+        category=MetricCategory.INDEPENDENT,
+        metric_type=MetricType.STRING,
+        requires_reference=False,
+        requires_text=False,
+        gpu_compatible=True,
+        auto_install=False,
+        dependencies=[],
+        description="GPU-required test metric.",
+    )
+    registry.register(DummyMetric, ref_text_metadata)
+    registry.register(DummyMetric, gpu_metadata)
+
+    with pytest.raises(ScoreConfigValidationException) as exc_info:
+        validate_score_config(
+            [
+                {"name": "not_a_metric"},
+                {"name": "needs_ref_text"},
+                {"name": "qwen_omni_language"},
+                {"name": "dummy", "threshlod": 0.5},
+            ],
+            registry=registry,
+            use_gt=False,
+            use_gt_text=False,
+            use_gpu=False,
+        )
+
+    message = str(exc_info.value)
+    assert "unknown metric name 'not_a_metric'" in message
+    assert "requires reference audio" in message
+    assert "requires reference text" in message
+    assert "requires GPU execution" in message
+    assert "unknown parameter(s): threshlod" in message
+
+
+def test_score_config_validation_reports_missing_optional_dependencies():
+    registry = _registry_with_dummy()
+
+    with pytest.raises(ScoreConfigValidationException, match="missing optional"):
+        validate_score_config([{"name": "dummy"}], registry=registry)
 
 
 def test_metric_discovery_describes_metric_without_instantiating_backend():
