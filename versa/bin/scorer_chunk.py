@@ -16,6 +16,7 @@ import soundfile as sf
 import torch
 import yaml
 from versa.definition import MetricCategory
+from versa.config_validation import validate_score_config
 from versa.scorer_shared import (
     audio_loader_setup,
     list_scoring,
@@ -289,7 +290,8 @@ def _maybe_chunk_filelists(
 
 
 def main():
-    args = get_parser().parse_args()
+    parser = get_parser()
+    args = parser.parse_args()
 
     # In case of using `local` backend, all GPU will be visible to all process.
     if args.use_gpu:
@@ -317,10 +319,27 @@ def main():
         )
         logging.warning("Skip DEBUG/INFO messages")
 
+    # find reference file
+    args.gt = None if args.gt == "None" else args.gt
+
+    with open(args.score_config, "r", encoding="utf-8") as f:
+        score_config = yaml.safe_load(f)
+
+    scorer = VersaScorer()
+    try:
+        validate_score_config(
+            score_config,
+            registry=scorer.registry,
+            use_gt=(args.gt is not None and not args.no_match),
+            use_gt_text=(args.text is not None),
+            use_gpu=args.use_gpu,
+        )
+    except ValueError as e:
+        parser.error(str(e))
+
     gen_files = audio_loader_setup(args.pred, args.io)
 
     # find reference file
-    args.gt = None if args.gt == "None" else args.gt
     if args.gt is not None and not args.no_match:
         gt_files = audio_loader_setup(args.gt, args.io)
     else:
@@ -361,9 +380,6 @@ def main():
     if args.enable_chunking:
         logging.info("The number of items (post-chunk) = %d", len(gen_files))
 
-    with open(args.score_config, "r", encoding="utf-8") as f:
-        score_config = yaml.safe_load(f)
-
     score_modules = load_score_modules(
         score_config,
         use_gt=(True if gt_files is not None else False),
@@ -385,7 +401,6 @@ def main():
     else:
         logging.info("No utterance-level scoring function is provided.")
 
-    scorer = VersaScorer()
     corpus_score_config = []
     for config in score_config:
         metadata = scorer.registry.get_metadata(config["name"])
