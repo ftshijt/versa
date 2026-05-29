@@ -1,0 +1,6 @@
+{"key": "utt_001", "model": "baseline", "pesq": 2.1, "stoi": 0.72, "wer": 0.18, "spk_similarity": 0.81, "mcd": 6.4}
+{"key": "utt_002", "model": "baseline", "pesq": 2.4, "stoi": 0.75, "wer": 0.15, "spk_similarity": 0.84, "mcd": 5.9}
+{"key": "utt_003", "model": "baseline", "pesq": 1.9, "stoi": 0.69, "wer": 0.23, "spk_similarity": 0.79, "mcd": 7.1}
+{"key": "utt_004", "model": "candidate", "pesq": 3.2, "stoi": 0.86, "wer": 0.09, "spk_similarity": 0.88, "mcd": 4.8}
+{"key": "utt_005", "model": "candidate", "pesq": 3.4, "stoi": 0.88, "wer": 0.07, "spk_similarity": 0.91, "mcd": 4.5}
+{"key": "utt_006", "model": "candidate", "pesq": 2.8, "stoi": 0.82, "wer": 0.12, "spk_similarity": 0.86, "mcd": 5.2}
