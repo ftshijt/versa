@@ -124,6 +124,8 @@ Homepage = "https://github.com/wavlab-speech/versa.git"
 
 [project.scripts]
 versa-score = "versa.bin.scorer:main"
+versa-aggregate = "versa.bin.aggregate_results:main"
+versa-visualize = "versa.bin.visualize:main"
 
 [tool.setuptools.packages.find]
 include = ["versa*"]

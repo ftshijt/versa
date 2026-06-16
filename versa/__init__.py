@@ -20,6 +20,13 @@ _SKIP_OPTIONAL_METRIC_IMPORTS = any(
     flag in sys.argv
     for flag in ("--list-metrics", "--describe-metric", "--recommend-config")
 )
+_SKIP_OPTIONAL_METRIC_IMPORTS = _SKIP_OPTIONAL_METRIC_IMPORTS or any(
+    Path(arg).name
+    in {"versa-visualize", "versa-aggregate", "visualize.py", "aggregate_results.py"}
+    or arg.endswith("versa.bin.visualize")
+    or arg.endswith("versa.bin.aggregate_results")
+    for arg in sys.argv
+)
 
 
 def _optional_metric_import(module_name, names, install_hint=None):

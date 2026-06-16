@@ -1,4 +1,45 @@
 ## Interactive Visualization of Versa Results
+
+### Packaged Report Command
+
+VERSA can generate a first-class report directly from a scoring JSONL file or a
+directory of result files:
+
+```
+versa-visualize results.jsonl --out report.html
+```
+
+The HTML report includes a radar overview, category sunburst, summary tables,
+mean/std, 95% confidence intervals, failure counts, best/worst examples, and
+outlier examples. CSV and Markdown exports are also available:
+
+```
+versa-visualize results.jsonl --out report.html --csv report.csv --markdown report.md
+```
+
+For model comparisons, group records by a field and VERSA will add per-metric
+rankings:
+
+```
+versa-visualize results.jsonl --out report.html --group-by model
+```
+
+The aggregation command can also write summary reports:
+
+```
+versa-aggregate results.jsonl --out metrics_report.csv
+versa-aggregate results.jsonl --out metrics_report.md --format md
+```
+
+For a quick smoke test after installation, run the bundled toy example:
+
+```
+demo/run_reporting_example.sh
+```
+
+It reads ``demo/reporting_example_results.jsonl`` and writes an HTML report plus
+CSV/Markdown summaries to ``${TMPDIR:-/tmp}/versa-reporting-example``.
+
 ### Steps
 * Additional Package Dependency Installation
 ```
