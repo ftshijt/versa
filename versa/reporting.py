@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from versa.definition import MetricRegistry
+
 IGNORED_FIELDS = {"key", "_source_file"}
 
 
@@ -156,6 +158,7 @@ def analyze_records(
     *,
     group_by: Optional[str] = None,
     outlier_limit: int = 3,
+    registry: Optional[MetricRegistry] = None,
 ) -> Dict[str, Any]:
     """Compute report-ready summaries from result records."""
     if not records:
@@ -163,7 +166,9 @@ def analyze_records(
 
     metrics = discover_numeric_metrics(records)
     metric_summaries = [
-        summarize_metric(metric, records, outlier_limit=outlier_limit)
+        summarize_metric(
+            metric, records, outlier_limit=outlier_limit, registry=registry
+        )
         for metric in sorted(metrics)
     ]
     categories: Dict[str, List[MetricSummary]] = defaultdict(list)
@@ -172,7 +177,7 @@ def analyze_records(
 
     groups = {}
     if group_by:
-        groups = summarize_groups(records, metrics, group_by)
+        groups = summarize_groups(records, metrics, group_by, registry=registry)
 
     return {
         "records": records,
@@ -197,7 +202,11 @@ def discover_numeric_metrics(records: Sequence[Dict[str, Any]]) -> List[str]:
 
 
 def summarize_metric(
-    metric: str, records: Sequence[Dict[str, Any]], *, outlier_limit: int = 3
+    metric: str,
+    records: Sequence[Dict[str, Any]],
+    *,
+    outlier_limit: int = 3,
+    registry: Optional[MetricRegistry] = None,
 ) -> MetricSummary:
     values: List[Tuple[str, float]] = []
     missing = 0
@@ -223,7 +232,7 @@ def summarize_metric(
     ci_delta = 1.96 * stderr
     minimum = min(numeric) if numeric else 0.0
     maximum = max(numeric) if numeric else 0.0
-    higher_is_better = metric_direction(metric)
+    higher_is_better = metric_direction(metric, registry=registry)
 
     if values and higher_is_better is False:
         best_key, best_value = min(values, key=lambda item: item[1])
@@ -247,7 +256,7 @@ def summarize_metric(
 
     return MetricSummary(
         name=metric,
-        category=metric_category(metric),
+        category=metric_category(metric, registry=registry),
         count=count,
         missing=missing,
         invalid=invalid,
@@ -269,7 +278,10 @@ def summarize_metric(
 
 
 def summarize_groups(
-    records: Sequence[Dict[str, Any]], metrics: Sequence[str], group_by: str
+    records: Sequence[Dict[str, Any]],
+    metrics: Sequence[str],
+    group_by: str,
+    registry: Optional[MetricRegistry] = None,
 ) -> Dict[str, Any]:
     grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for record in records:
@@ -277,10 +289,12 @@ def summarize_groups(
 
     metric_rankings = {}
     for metric in metrics:
-        direction = metric_direction(metric)
+        direction = metric_direction(metric, registry=registry)
         rows = []
         for group, group_records in grouped.items():
-            summary = summarize_metric(metric, group_records, outlier_limit=0)
+            summary = summarize_metric(
+                metric, group_records, outlier_limit=0, registry=registry
+            )
             if summary.count:
                 rows.append(
                     {
@@ -463,8 +477,11 @@ svg text {{ font-family: inherit; fill: var(--muted); font-size: 11px; }}
         handle.write(document)
 
 
-def metric_category(metric: str) -> str:
-    normalized = _strip_prefix(metric).lower()
+def metric_category(metric: str, registry: Optional[MetricRegistry] = None) -> str:
+    metadata = _metadata_for_metric(metric, registry)
+    if metadata and metadata.category.value in {"non_match", "distributional"}:
+        return metadata.category.value
+    normalized = _strip_prefix(metadata.name if metadata else metric).lower()
     for category, names in METRIC_CATEGORIES.items():
         if normalized in {name.lower() for name in names}:
             return category
@@ -483,8 +500,11 @@ def metric_category(metric: str) -> str:
     return "other"
 
 
-def metric_direction(metric: str) -> Optional[bool]:
-    normalized = _strip_prefix(metric).lower()
+def metric_direction(
+    metric: str, registry: Optional[MetricRegistry] = None
+) -> Optional[bool]:
+    metadata = _metadata_for_metric(metric, registry)
+    normalized = _strip_prefix(metadata.name if metadata else metric).lower()
     if any(token in normalized for token in ["wer", "cer", "error", "rmse", "mcd"]):
         return False
     if "distance" in normalized and "token_distance" not in normalized:
@@ -510,6 +530,28 @@ def metric_direction(metric: str) -> Optional[bool]:
     ):
         return True
     return None
+
+
+def _metadata_for_metric(metric: str, registry: Optional[MetricRegistry]):
+    if registry is None:
+        return None
+    for candidate in _metric_name_candidates(metric):
+        metadata = registry.get_metadata(candidate)
+        if metadata is not None:
+            return metadata
+    return None
+
+
+def _metric_name_candidates(metric: str) -> List[str]:
+    candidates = [metric, _strip_prefix(metric)]
+    parts = metric.split("_")
+    for index in range(1, len(parts)):
+        candidates.append("_".join(parts[index:]))
+    unique = []
+    for candidate in candidates:
+        if candidate and candidate not in unique:
+            unique.append(candidate)
+    return unique
 
 
 def _collect_input_paths(input_path: str) -> List[Path]:

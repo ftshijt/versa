@@ -6,6 +6,7 @@ import argparse
 import os
 from pathlib import Path
 
+from versa.metric_discovery import create_metric_discovery_registry
 from versa.reporting import (
     analyze_records,
     read_result_records,
@@ -64,10 +65,12 @@ def main() -> None:
     args = parser.parse_args()
 
     records = read_result_records(args.input)
+    registry = create_metric_discovery_registry(include_runtime_imports=False)
     analysis = analyze_records(
         records,
         group_by=args.group_by,
         outlier_limit=args.outlier_limit,
+        registry=registry,
     )
 
     output_path = Path(args.out)

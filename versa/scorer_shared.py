@@ -55,23 +55,10 @@ def audio_loader_setup(audio, io):
 
 
 def _create_populated_registry() -> MetricRegistry:
-    """Create a registry populated with all importable package metrics."""
-    import versa as versa_package
+    """Create a registry populated with metric metadata."""
+    from versa.metric_discovery import create_metric_discovery_registry
 
-    registry = MetricRegistry()
-    for name in dir(versa_package):
-        if not name.startswith("register_") or not name.endswith("_metric"):
-            continue
-        register_fn = getattr(versa_package, name)
-        if not callable(register_fn):
-            continue
-        try:
-            register_fn(registry)
-        except Exception as e:
-            logging.getLogger(__name__).warning(
-                "Failed to register metric via %s: %s", name, e
-            )
-    return registry
+    return create_metric_discovery_registry(include_runtime_imports=False)
 
 
 def load_score_modules(
@@ -315,6 +302,12 @@ class VersaScorer:
                         f"Cannot use {metric_name} because no ground truth text is provided"
                     )
                     continue
+
+                from versa.metric_registry import register_metric_for_config
+
+                register_metric_for_config(
+                    self.registry, metric_name, logger=self.logger
+                )
 
                 # Create metric instance
                 metric_config = {**config, "use_gpu": use_gpu}

@@ -94,6 +94,33 @@ def get_parser() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--report",
+        type=str,
+        default=None,
+        help=(
+            "Optional report path generated from utterance-level scores after "
+            "scoring. Format is inferred from extension unless --report-format "
+            "is set."
+        ),
+    )
+    parser.add_argument(
+        "--report-format",
+        choices=["auto", "html", "csv", "md"],
+        default="auto",
+        help="Report format for --report.",
+    )
+    parser.add_argument(
+        "--report-group-by",
+        default=None,
+        help="Optional scored record field used for per-metric report rankings.",
+    )
+    parser.add_argument(
+        "--report-outlier-limit",
+        type=int,
+        default=3,
+        help="Maximum outlier examples to keep per metric in --report.",
+    )
+    parser.add_argument(
         "--list-metrics",
         action="store_true",
         help="List registered metrics and exit.",
@@ -270,6 +297,7 @@ def main():
         )
     ]
 
+    score_info = []
     if args.scoring_mode == "metric":
         score_info = scorer.score_utterances_by_metric(
             gen_files,
@@ -342,6 +370,63 @@ def main():
     # Ensure at least one scoring function is provided
     if utterance_metric_count == 0 and len(corpus_suite.metrics) == 0:
         raise ValueError("No scoring function is provided")
+
+    if args.report:
+        if not score_info:
+            raise ValueError("--report requires at least one utterance-level score")
+        _write_report(
+            score_info,
+            args.report,
+            report_format=args.report_format,
+            group_by=args.report_group_by,
+            outlier_limit=args.report_outlier_limit,
+            registry=scorer.registry,
+        )
+
+
+def _write_report(
+    score_info,
+    report_path,
+    *,
+    report_format,
+    group_by,
+    outlier_limit,
+    registry,
+):
+    from pathlib import Path
+
+    from versa.reporting import (
+        analyze_records,
+        write_csv_report,
+        write_html_report,
+        write_markdown_report,
+    )
+
+    output_path = Path(report_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    if report_format == "auto":
+        report_format = {
+            ".html": "html",
+            ".htm": "html",
+            ".csv": "csv",
+            ".md": "md",
+            ".markdown": "md",
+        }.get(output_path.suffix.lower(), "html")
+
+    analysis = analyze_records(
+        score_info,
+        group_by=group_by,
+        outlier_limit=outlier_limit,
+        registry=registry,
+    )
+    if report_format == "html":
+        write_html_report(analysis, report_path)
+    elif report_format == "csv":
+        write_csv_report(analysis, report_path)
+    else:
+        write_markdown_report(analysis, report_path)
+
+    logging.info("Wrote %s report to %s", report_format, report_path)
 
 
 if __name__ == "__main__":
