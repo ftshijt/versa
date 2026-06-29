@@ -1,5 +1,9 @@
 import csv
+import subprocess
+import sys
 
+from versa.definition import MetricCategory, MetricMetadata, MetricRegistry, MetricType
+from versa.bin.scorer import _write_report
 from versa.reporting import (
     analyze_records,
     metric_category,
@@ -72,3 +76,62 @@ def test_report_exports(tmp_path):
 def test_metric_category_strips_model_prefixes():
     assert metric_category("arecho_pesq") == "speech_enhancement"
     assert metric_category("custom_wer") == "asr_wer_cer"
+
+
+def test_reporting_import_is_lightweight():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from versa.reporting import analyze_records; print(analyze_records)",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert "analyze_records" in result.stdout
+
+
+def test_reporting_uses_registry_alias_metadata():
+    registry = MetricRegistry()
+    registry.register(
+        object,
+        MetricMetadata(
+            name="pesq",
+            category=MetricCategory.DEPENDENT,
+            metric_type=MetricType.FLOAT,
+            requires_reference=True,
+            requires_text=False,
+            gpu_compatible=False,
+            auto_install=True,
+            dependencies=["pesq"],
+            description="PESQ",
+        ),
+        aliases=["custom_pesq_alias"],
+    )
+
+    assert (
+        metric_category("custom_pesq_alias", registry=registry) == "speech_enhancement"
+    )
+    assert (
+        metric_category("experiment_custom_pesq_alias", registry=registry)
+        == "speech_enhancement"
+    )
+
+
+def test_scorer_report_writer_exports_html(tmp_path):
+    registry = MetricRegistry()
+    report_path = tmp_path / "score_report.html"
+
+    _write_report(
+        [{"key": "a", "pesq": 2.0}, {"key": "b", "pesq": 3.0}],
+        str(report_path),
+        report_format="auto",
+        group_by=None,
+        outlier_limit=3,
+        registry=registry,
+    )
+
+    assert "VERSA Results Report" in report_path.read_text(encoding="utf-8")
