@@ -116,23 +116,17 @@ _TASK_ALIASES = {
 }
 
 
-def create_metric_discovery_registry() -> MetricRegistry:
+def create_metric_discovery_registry(
+    *, include_runtime_imports: bool = False
+) -> MetricRegistry:
     """Create the registry used by discovery commands."""
-    with _quiet_metric_imports():
-        import versa as versa_package
+    if include_runtime_imports:
+        with _quiet_metric_imports():
+            from versa.metric_registry import create_populated_registry
 
+            registry = create_populated_registry(logger=logging.getLogger(__name__))
+    else:
         registry = MetricRegistry()
-        for name in dir(versa_package):
-            if not name.startswith("register_") or not name.endswith("_metric"):
-                continue
-            register_fn = getattr(versa_package, name)
-            if callable(register_fn):
-                try:
-                    register_fn(registry)
-                except Exception as e:
-                    logging.getLogger(__name__).debug(
-                        "Failed to register metric via %s: %s", name, e
-                    )
     _add_source_discovered_metrics(registry)
     return registry
 
