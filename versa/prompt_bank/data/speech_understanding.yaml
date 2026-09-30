@@ -50,7 +50,7 @@ protocols:
           Each example above states audible evidence and the label that evidence supports. Apply the same label guide to the audio you are given.
     provenance:
       sources:
-        - https://github.com/wavlab-speech/versa
+        - https://github.com/wavlab-speech/versa/blob/4f82185c04d99528c76565f3cf65a0604441c5c5/versa/utterance_metrics/qwen2_audio.py#L190-L199
       rationale: >-
         Adapted from the existing VERSA Qwen speech_emotion default prompt. The
         label set is restated as an explicit closed-label response contract with
@@ -124,7 +124,7 @@ protocols:
           Each example above states audible evidence and the recording-quality label that evidence supports. Apply the same label guide to the audio you are given.
     provenance:
       sources:
-        - https://github.com/wavlab-speech/versa
+        - https://github.com/wavlab-speech/versa/blob/4f82185c04d99528c76565f3cf65a0604441c5c5/versa/utterance_metrics/qwen2_audio.py#L249-L255
       rationale: >-
         Adapted from the existing VERSA Qwen recording_quality default prompt.
         Companion metric links let a judged label be read next to the
@@ -176,7 +176,7 @@ protocols:
         Listen to the audio and count the distinct speakers you can hear. Count a speaker once however often they speak, and count only human voices that produce speech. Do not count background voices that are part of an ambience and cannot be followed, and do not count singing or non-speech vocal sounds. Answer 0 when the recording contains no speech, and 10 when more distinct speakers than that are audible.
     provenance:
       sources:
-        - https://github.com/wavlab-speech/versa
+        - https://github.com/wavlab-speech/versa/blob/4f82185c04d99528c76565f3cf65a0604441c5c5/versa/utterance_metrics/qwen2_audio.py#L85-L90
       rationale: >-
         Adapted from the existing VERSA Qwen speaker_count default prompt. The
         bounded integer contract replaces the informal "single number between
@@ -243,7 +243,7 @@ protocols:
           Each example above states audible evidence and the overlap label that evidence supports. Apply the same label guide to the audio you are given.
     provenance:
       sources:
-        - https://github.com/wavlab-speech/versa
+        - https://github.com/wavlab-speech/versa/blob/4f82185c04d99528c76565f3cf65a0604441c5c5/versa/utterance_metrics/qwen2_audio.py#L232-L239
       rationale: >-
         Adapted from the existing VERSA Qwen overlapping_speech default prompt.
         This protocol reports a coarse amount of overlap; it is not a substitute

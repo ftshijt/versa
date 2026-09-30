@@ -10,9 +10,15 @@ import json
 import math
 import re
 from dataclasses import asdict, dataclass
-from typing import Optional, Tuple
+from types import MappingProxyType
+from typing import Mapping, Optional, Tuple, Union
 
 BANK_SCHEMA_VERSION = 1
+# Version of the text the renderer itself contributes: response instructions,
+# the demonstration block, context delimiters, and whitespace canonicalization.
+# It is part of every protocol digest, so any change to renderer output must
+# bump it and therefore changes every digest and rendered snapshot.
+RENDERER_VERSION = 1
 
 PROTOCOL_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+\.v[1-9][0-9]*$")
 PLACEHOLDER_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -42,6 +48,12 @@ OPTIONAL_PLACEHOLDER_DEFAULTS = {
 }
 # Placeholders whose context value is a sequence of short strings.
 SEQUENCE_PLACEHOLDERS = frozenset({"rubric_items"})
+# Free-text placeholders the renderer encloses in ``<name>`` ... ``</name>`` tags,
+# so caller text can never read as part of the protocol's own instructions.
+DELIMITED_PLACEHOLDERS = frozenset({"target_instruction", "reference_text"})
+# Placeholders rendered inline as short, single-line candidate labels.
+LABEL_PLACEHOLDERS = frozenset({"candidate_a_name", "candidate_b_name"})
+MAX_LABEL_PLACEHOLDER_LENGTH = 40
 
 PROTOCOL_STATUSES = ("draft", "experimental", "stable", "deprecated")
 DEFAULT_LISTED_STATUSES = frozenset({"experimental", "stable"})
@@ -54,6 +66,16 @@ METRIC_LINK_ROLES = ("companion", "diagnostic", "calibration")
 JSON_FIELD_TYPES = ("string", "integer", "number", "boolean", "array")
 NUMERIC_JSON_TYPES = ("integer", "number")
 MIN_FEW_SHOT_EXAMPLES = 2
+# Outcomes of parsing one response. Backend and input failures are recorded by
+# the runner, not here, because no response text exists for them.
+RESPONSE_STATUSES = ("scored", "abstained", "parse_failed")
+
+# Plain ASCII number grammars. ``int()`` and ``float()`` also accept digit
+# separators ("1_0") and non-ASCII digits, which a strict contract must reject.
+_INTEGER_TEXT_PATTERN = re.compile(r"[+-]?[0-9]+")
+_SCALAR_TEXT_PATTERN = re.compile(
+    r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+)
 
 
 class PromptBankError(Exception):
@@ -542,10 +564,13 @@ def digest_payload(
     Descriptions, citations, titles, status, metric links, and runner
     declarations are excluded: they cannot change rendered text, accepted
     inputs, or parsed outputs. Model entries contribute only rendering notes.
+    The renderer version is included because the renderer contributes text of
+    its own, so a renderer change is visible in every protocol digest.
     """
     return {
         "id": protocol_id,
         "version": version,
+        "renderer_version": RENDERER_VERSION,
         "input_contract": asdict(input_contract),
         "response_contract": asdict(response_contract),
         "modes": asdict(modes),
@@ -1015,61 +1040,110 @@ def _parse_few_shot(block, response_contract, source, protocol_id, errors):
     return FewShotSpec(examples=tuple(examples), template=template)
 
 
-def validate_response(text, contract):
-    """Return the reasons a response string does not satisfy a response contract.
+@dataclass(frozen=True)
+class ParsedResponse:
+    """The outcome of parsing one model response under a response contract.
 
-    An empty list means the response is acceptable. The check is deliberately
-    strict: it never extracts a value from surrounding prose.
+    ``value`` is the reportable value: the label of a closed-label or pairwise
+    contract, the number of an integer or scalar contract, and the declared
+    primary numeric field of a JSON contract (``None`` when none is declared).
+    It is ``None`` whenever ``status`` is not ``scored``, so an abstention or a
+    malformed response can never reach an aggregate. ``payload`` holds the
+    validated JSON object, with arrays as tuples, for scored and abstained JSON
+    responses.
     """
+
+    status: str
+    value: Optional[Union[str, int, float]] = None
+    payload: Optional[Mapping[str, object]] = None
+    errors: Tuple[str, ...] = ()
+
+
+def parse_response(text, contract):
+    """Parse one response string strictly and return a :class:`ParsedResponse`.
+
+    The whole response must be the answer: no value is ever extracted from
+    surrounding prose, code fences, or alternative number spellings.
+    """
+    if not isinstance(text, str):
+        return _parse_failure(["must be a string"])
     value = text.strip()
-    if contract.allow_abstain and contract.mode != "json":
-        if value == contract.abstain_label:
-            return []
+    if contract.mode == "json":
+        return _parse_json_response(value, contract)
+    if contract.allow_abstain and value == contract.abstain_label:
+        return ParsedResponse(status="abstained")
     if contract.mode in ("closed_label", "pairwise"):
         allowed = contract.choice_labels()
         if value not in allowed:
-            return ["must be exactly one of {}".format(list(allowed))]
-        return []
-    if contract.mode in ("integer", "scalar") and None in (
-        contract.minimum,
-        contract.maximum,
-    ):
-        return ["declares an incomplete numeric range"]
+            return _parse_failure(["must be exactly one of {}".format(list(allowed))])
+        return ParsedResponse(status="scored", value=value)
+    if None in (contract.minimum, contract.maximum):
+        return _parse_failure(["declares an incomplete numeric range"])
     if contract.mode == "integer":
-        try:
-            number = int(value)
-        except ValueError:
-            return ["must be a single integer"]
-        if not contract.minimum <= number <= contract.maximum:
-            return [
-                "must be between {} and {}".format(contract.minimum, contract.maximum)
-            ]
-        return []
-    if contract.mode == "scalar":
-        try:
-            number = float(value)
-        except ValueError:
-            return ["must be a single number"]
+        if not _INTEGER_TEXT_PATTERN.fullmatch(value):
+            return _parse_failure(["must be a single integer"])
+        number = int(value)
+    else:
+        if not _SCALAR_TEXT_PATTERN.fullmatch(value):
+            return _parse_failure(["must be a single number"])
+        number = float(value)
         if not is_finite_number(number):
-            return ["must be a finite number"]
-        if not contract.minimum <= number <= contract.maximum:
-            return [
-                "must be between {} and {}".format(contract.minimum, contract.maximum)
-            ]
-        return []
-    return _validate_json_response(value, contract)
+            return _parse_failure(["must be a finite number"])
+    if not contract.minimum <= number <= contract.maximum:
+        return _parse_failure(
+            ["must be between {} and {}".format(contract.minimum, contract.maximum)]
+        )
+    return ParsedResponse(status="scored", value=number)
 
 
-def _validate_json_response(value, contract):
-    """Return the reasons a response is not valid under a JSON contract."""
+def validate_response(text, contract):
+    """Return the reasons a response string does not satisfy a response contract.
+
+    An empty list means the response is acceptable. This is the error list of
+    :func:`parse_response`, so both apply exactly the same rules.
+    """
+    return list(parse_response(text, contract).errors)
+
+
+def _parse_failure(messages):
+    """Return a ``parse_failed`` outcome carrying every reason found."""
+    return ParsedResponse(status="parse_failed", errors=tuple(messages))
+
+
+def _parse_json_response(value, contract):
+    """Parse a response under a JSON contract, resolving abstention first."""
     try:
         payload = loads_strict_json(value)
     except (DuplicateJsonKeyError, NonFiniteJsonError) as error:
-        return [str(error)]
+        return _parse_failure([str(error)])
     except ValueError:
-        return ["must be valid JSON"]
+        return _parse_failure(["must be valid JSON"])
     if not isinstance(payload, dict):
-        return ["must be a JSON object"]
+        return _parse_failure(["must be a JSON object"])
+    messages = _json_field_messages(payload, contract)
+    if messages:
+        return _parse_failure(messages)
+    frozen = MappingProxyType(
+        {
+            name: tuple(item) if isinstance(item, list) else item
+            for name, item in payload.items()
+        }
+    )
+    if payload.get("abstain") is True:
+        messages = _abstention_messages(payload, contract)
+        if messages:
+            return _parse_failure(messages)
+        return ParsedResponse(status="abstained", payload=frozen)
+    primary = contract.primary_numeric_field
+    return ParsedResponse(
+        status="scored",
+        value=payload[primary] if primary is not None else None,
+        payload=frozen,
+    )
+
+
+def _json_field_messages(payload, contract):
+    """Return the reasons a JSON object does not match the declared fields."""
     messages = []
     declared = {field.name: field for field in contract.fields}
     unknown = sorted(set(payload) - set(declared))
@@ -1081,6 +1155,32 @@ def _validate_json_response(value, contract):
                 messages.append("is missing required field {!r}".format(field.name))
             continue
         messages.extend(_validate_json_value(payload[field.name], field))
+    return messages
+
+
+def _abstention_messages(payload, contract):
+    """Require an abstaining JSON response to carry only the sentinel values.
+
+    An abstention sets every bounded numeric field to its declared minimum and
+    leaves every array empty. A response that abstains while still asserting a
+    rating contradicts itself, so it is a parse failure, not an abstention.
+    """
+    messages = []
+    for field in contract.fields:
+        if field.name not in payload:
+            continue
+        value = payload[field.name]
+        if field.type in NUMERIC_JSON_TYPES and field.minimum is not None:
+            if value != field.minimum:
+                messages.append(
+                    "field {!r} must be {} when abstain is true".format(
+                        field.name, field.minimum
+                    )
+                )
+        elif field.type == "array" and value:
+            messages.append(
+                "field {!r} must be empty when abstain is true".format(field.name)
+            )
     return messages
 
 

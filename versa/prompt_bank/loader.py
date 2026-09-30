@@ -262,8 +262,12 @@ def load_bank(force_reload=False):
 
 
 def validate_bank():
-    """Validate every bundled record, reporting all errors in one exception."""
-    return load_bank(force_reload=True)
+    """Validate every bundled record, reporting all errors in one exception.
+
+    The bank is rebuilt from the packaged files and returned without replacing
+    the cached bank, so validating never changes what other callers look up.
+    """
+    return build_bank(_read_documents())
 
 
 def get_protocol(protocol_id):
@@ -286,18 +290,7 @@ def list_protocols(
     ``draft`` and ``deprecated`` records are returned only when ``status`` names
     them explicitly.
     """
-    statuses = (
-        DEFAULT_LISTED_STATUSES
-        if status is None
-        else frozenset({status} if isinstance(status, str) else status)
-    )
-    unknown = sorted(statuses - set(PROTOCOL_STATUSES))
-    if unknown:
-        raise ValueError(
-            "unknown lifecycle status {}; known statuses are {}".format(
-                unknown, list(PROTOCOL_STATUSES)
-            )
-        )
+    statuses = _status_filter(status)
     selected = []
     for protocol in load_bank().protocols:
         if protocol.status not in statuses:
@@ -325,3 +318,34 @@ def list_protocols(
             continue
         selected.append(protocol)
     return tuple(selected)
+
+
+def _status_filter(status):
+    """Return the lifecycle statuses a ``list_protocols`` call selects.
+
+    ``None`` selects the default view. A single status or a non-empty
+    collection of known statuses selects exactly those; an empty collection is
+    rejected because it would silently select nothing.
+    """
+    if status is None:
+        return DEFAULT_LISTED_STATUSES
+    if isinstance(status, str):
+        statuses = [status]
+    else:
+        try:
+            statuses = list(status)
+        except TypeError:
+            statuses = None
+        if not statuses:
+            raise ValueError(
+                "status must be a lifecycle status or a non-empty collection of "
+                "statuses; known statuses are {}".format(list(PROTOCOL_STATUSES))
+            )
+    unknown = sorted({repr(item) for item in statuses if item not in PROTOCOL_STATUSES})
+    if unknown:
+        raise ValueError(
+            "unknown lifecycle status {}; known statuses are {}".format(
+                ", ".join(unknown), list(PROTOCOL_STATUSES)
+            )
+        )
+    return frozenset(statuses)

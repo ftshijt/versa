@@ -172,23 +172,36 @@ what the code does.
   protocol.
 - `candidate_a_name` and `candidate_b_name` are optional context with the fixed
   defaults `Candidate A` and `Candidate B`, and are valid only for two-audio
-  protocols. `rubric_items` is accepted as a sequence of strings rendered as a
+  protocols. They must be single-line labels of at most 40 characters and should
+  be opaque, since a system name tells the judge which system made each
+  recording. `rubric_items` is accepted as a sequence of strings rendered as a
   dash list; no bundled protocol uses it yet.
 - A required text input must appear in every renderable body of its protocol.
   Declaring an input that no body renders would silently ignore caller context.
 - Context values are substituted verbatim and never re-interpreted, so a brace
-  inside a caption or instruction is safe. Unknown context keys, blank values,
-  and missing required keys raise `RenderError` before any text is produced.
+  inside a caption or instruction is safe. The only normalization is trimming
+  outer whitespace and converting line endings to `\n`; a value's own blank
+  lines are kept. Unknown context keys, blank values, and missing required keys
+  raise `RenderError` before any text is produced.
+- `reference_text` and `target_instruction` are rendered between tags named
+  after the placeholder (`<reference_text>` ... `</reference_text>`), each on
+  its own line, and the protocol body places the placeholder on its own line
+  and states that the tagged content is data to evaluate, not instructions. A
+  value containing its own opening or closing tag, in any letter case, is
+  rejected. These inputs often come from the system under test, so an
+  undelimited value could rewrite the rubric.
 - Response instructions are generated from the response contract, including the
   compact JSON template in declared field order. Protocols do not hand-write
   JSON templates. Abstention wording differs by contract mode: label contracts
   say "any of those labels", numeric contracts say "an answer". One-sided bounds
   render as stated bounds (`<integer, at least 0>`) and optional keys are named,
   so the instructions and the validator describe the same contract.
-- Canonical text: each section is stripped, per-line trailing whitespace is
-  removed, blank-line runs collapse to one, sections join with one blank line,
-  and the prompt ends with exactly one newline. Authored YAML paragraphs are
-  single lines so substitution cannot produce ragged wrapping.
+- Canonical text: each protocol or renderer section is stripped, per-line
+  trailing whitespace is removed, and blank-line runs collapse to one, before
+  any context is substituted; sections join with one blank line, and the prompt
+  ends with exactly one newline. Canonicalization never touches caller context.
+  Authored YAML paragraphs are single lines so substitution cannot produce
+  ragged wrapping.
 
 ### Schema
 
@@ -244,17 +257,35 @@ what the code does.
 
 - `protocol_digest` is the SHA-256 of canonical JSON (UTF-8, recursively sorted
   keys, order-preserving arrays, `ensure_ascii=False`, compact separators) over
-  exactly: `id`, `version`, the input contract, the response contract, the mode
-  bodies, and model entries' `rendering_notes`. Titles, descriptions, status,
-  provenance, metric links, and runner declarations are excluded. The bank
-  schema version is carried beside the digest rather than inside it.
+  exactly: `id`, `version`, `RENDERER_VERSION`, the input contract, the
+  response contract, the mode bodies, and model entries' `rendering_notes`.
+  Titles, descriptions, status, provenance, metric links, and runner
+  declarations are excluded. The bank schema version is carried beside the
+  digest rather than inside it.
+- The renderer contributes text of its own (response instructions, the
+  demonstration block, context tags, whitespace rules), so `RENDERER_VERSION` is
+  inside every protocol digest. Any change to renderer output bumps it, which
+  changes every digest and snapshot together; the protocol digest therefore
+  identifies everything that determines the rendered text except the context.
 - `RenderedPrompt` also carries `rendered_digest`, the SHA-256 of the exact
-  rendered text. Two renderings of one protocol with different captions share a
-  protocol digest by design, so the rendered digest is what identifies an
-  evaluation.
-- Response validation is strict: non-finite numbers (`NaN`, `Infinity`, and
-  overflow such as `1e400`) and repeated JSON keys are rejected rather than
-  silently resolved to the last value.
+  rendered text, `context_digest`, the digest of the caller context after
+  validation and defaults, and `renderer_version`. Two renderings of one
+  protocol with different captions share a protocol digest by design, so the
+  rendered digest is what identifies an evaluation.
+- Response parsing is strict and has one implementation: `parse_response`
+  returns a `ParsedResponse` whose `status` is `scored`, `abstained`, or
+  `parse_failed`, and `validate_response` is its error list. Non-finite numbers
+  (`NaN`, `Infinity`, and overflow such as `1e400`) and repeated JSON keys are
+  rejected rather than silently resolved to the last value. Integer and scalar
+  answers must match a plain ASCII number grammar, so digit separators (`1_0`)
+  and non-ASCII digits are rejected even though `int()` and `float()` accept
+  them.
+- `ParsedResponse.value` is set only for `scored` responses: the label, the
+  number, or a JSON contract's `primary_numeric_field`. A JSON response with
+  `abstain: true` is `abstained` only when every bounded numeric field equals
+  its declared minimum and every array is empty; otherwise it contradicts itself
+  and is `parse_failed`. Protocols that use JSON abstention must state those
+  sentinel values in their instructions.
 - Validation collects every error in one `BankValidationError`, each message
   prefixed with its source file and protocol ID.
 - `manifest.yaml` is authoritative: a missing indexed file, a repeated entry, a
@@ -331,6 +362,7 @@ The foundation API should be small and stable:
 from versa.prompt_bank import (
     get_protocol,
     list_protocols,
+    parse_response,
     render_protocol,
     validate_bank,
 )
@@ -353,10 +385,14 @@ Required behavior:
   `deprecated`, and returns records sorted by ID.
 - `render_protocol(protocol_or_id, mode, context)` returns a `RenderedPrompt`
   object with `text`, `protocol_id`, `protocol_version`, `mode`, and optional
-  `response_schema`, plus `protocol_digest`, `rendered_digest`, and
-  `bank_schema_version`.
+  `response_schema`, plus `protocol_digest`, `rendered_digest`,
+  `context_digest`, `renderer_version`, and `bank_schema_version`.
 - `validate_bank()` validates every bundled record and reports all errors in one
-  exception, including source filename and protocol ID.
+  exception, including source filename and protocol ID. It does not replace the
+  cached bank that `get_protocol` reads.
+- `parse_response(text, contract)` returns a `ParsedResponse` with a status of
+  `scored`, `abstained`, or `parse_failed`, the reportable value, the frozen
+  JSON payload, and the error list; `validate_response` returns that error list.
 
 Avoid exposing a public `Prompt` class. The public concept is a protocol, not a
 bare string.
@@ -863,7 +899,7 @@ Proposed result envelope for new structured protocols:
 {
   "raw_response": "{...}",
   "parsed": {"score": 4, "evidence": ["clear speech"], "confidence": 0.8},
-  "parse_status": "ok",
+  "parse_status": "scored",
   "protocol_id": "generation.prompt_alignment.v1",
   "protocol_version": 1,
   "protocol_digest": "sha256:...",
@@ -885,8 +921,10 @@ Rules:
   repair malformed JSON or silently strip Markdown fences.
 - Record applied normalization beside `parsed` whenever the normalized form
   differs from `raw_response`.
-- Return `parse_status: invalid_json`, `invalid_label`, `out_of_range`, or
-  `unsupported` instead of guessing a value.
+- Take `parse_status` from `parse_response` (`scored`, `abstained`, or
+  `parse_failed`) and keep its error messages for the failure reason, instead of
+  guessing a value. Runner-level outcomes (`backend_error`, `invalid_input`) are
+  added by the runner because no response text exists for them.
 - Flatten one declared numeric field into a stable score key only when the
   protocol explicitly names both `primary_numeric_field` and `output_key`, for
   example

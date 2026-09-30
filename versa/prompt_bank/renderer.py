@@ -1,8 +1,10 @@
 """Deterministic text rendering for VERSA Prompt Bank protocols.
 
 The renderer owns whitespace, section order, label order, demonstration order,
-and structured-output templates. It never loads audio, imports a model, or
-treats context values as templates.
+context delimiters, and structured-output templates. It never loads audio,
+imports a model, or treats context values as templates. Free-text context is
+enclosed in tags named after its placeholder and is otherwise reproduced
+verbatim, so caller text cannot read as part of the protocol's instructions.
 """
 
 from dataclasses import dataclass
@@ -10,11 +12,16 @@ from typing import Optional
 
 from versa.prompt_bank.schema import (
     BANK_SCHEMA_VERSION,
+    compute_digest,
+    DELIMITED_PLACEHOLDERS,
     digest_text,
+    LABEL_PLACEHOLDERS,
+    MAX_LABEL_PLACEHOLDER_LENGTH,
     mode_bodies,
     OPTIONAL_PLACEHOLDER_DEFAULTS,
     RENDER_MODES,
     RENDERER_PLACEHOLDERS,
+    RENDERER_VERSION,
     SEQUENCE_PLACEHOLDERS,
     Protocol,
     RenderError,
@@ -29,9 +36,11 @@ from versa.prompt_bank.schema import (
 class RenderedPrompt:
     """One rendered protocol text together with its reproducibility identity.
 
-    ``protocol_digest`` identifies the protocol; two renderings with different
-    captions or instructions share it. ``rendered_digest`` identifies this exact
-    text, so a result record can prove which prompt produced it.
+    ``protocol_digest`` identifies the protocol, including the renderer version;
+    two renderings with different captions or instructions share it.
+    ``context_digest`` identifies the caller context after validation and
+    defaults, and ``rendered_digest`` identifies this exact text, so a result
+    record can prove which prompt produced it.
     """
 
     text: str
@@ -39,7 +48,9 @@ class RenderedPrompt:
     protocol_version: int
     mode: str
     protocol_digest: str
-    rendered_digest: str = ""
+    rendered_digest: str
+    context_digest: str
+    renderer_version: int = RENDERER_VERSION
     bank_schema_version: int = BANK_SCHEMA_VERSION
     response_schema: Optional[ResponseContract] = None
 
@@ -66,14 +77,21 @@ def render_protocol(protocol, mode="zero_shot", context=None):
             )
         )
     bodies = mode_bodies(protocol.modes, mode)
-    values = _resolve_context(protocol, mode, bodies, context or {})
-    sections = [substitute(bodies[0], values)]
+    context_values = _resolve_context(protocol, mode, bodies, context or {})
+    values = _substitution_values(protocol, context_values)
+    # Protocol text is canonicalized before substitution, so context values are
+    # reproduced exactly instead of having their own blank lines collapsed.
+    sections = [substitute(_canonical_section(bodies[0]), values)]
     if mode == "few_shot_text":
-        sections.append(_examples_section(protocol.modes.few_shot_text.examples))
+        sections.append(
+            _canonical_section(_examples_section(protocol.modes.few_shot_text.examples))
+        )
     for body in bodies[1:]:
-        sections.append(substitute(body, values))
-    sections.append(response_instructions(protocol.response_contract))
-    rendered = _canonical_text(sections)
+        sections.append(substitute(_canonical_section(body), values))
+    sections.append(
+        _canonical_section(response_instructions(protocol.response_contract))
+    )
+    rendered = "\n\n".join(section for section in sections if section) + "\n"
     return RenderedPrompt(
         text=rendered,
         protocol_id=protocol.id,
@@ -81,6 +99,8 @@ def render_protocol(protocol, mode="zero_shot", context=None):
         mode=mode,
         protocol_digest=protocol.digest,
         rendered_digest=digest_text(rendered),
+        context_digest=compute_digest(context_values),
+        renderer_version=RENDERER_VERSION,
         bank_schema_version=BANK_SCHEMA_VERSION,
         response_schema=protocol.response_contract,
     )
@@ -98,7 +118,11 @@ def _resolve(protocol):
 
 
 def _resolve_context(protocol, mode, bodies, context):
-    """Validate caller context strictly and return every substitution value."""
+    """Validate caller context strictly and return the normalized caller values.
+
+    The result covers every caller placeholder the rendering uses, with
+    documented defaults applied, and is what ``context_digest`` identifies.
+    """
     if not isinstance(context, dict):
         raise RenderError("context must be a mapping")
     used = []
@@ -114,9 +138,19 @@ def _resolve_context(protocol, mode, bodies, context):
                 unknown, protocol.id, mode, sorted(caller_keys)
             )
         )
+    return {name: _context_value(protocol, mode, name, context) for name in caller_keys}
+
+
+def _substitution_values(protocol, context_values):
+    """Return the text substituted for every placeholder of one rendering."""
     values = {"labels": ", ".join(protocol.response_contract.choice_labels())}
-    for name in caller_keys:
-        values[name] = _context_value(protocol, mode, name, context)
+    for name, value in context_values.items():
+        if name in SEQUENCE_PLACEHOLDERS:
+            values[name] = "\n".join("- " + item for item in value)
+        elif name in DELIMITED_PLACEHOLDERS:
+            values[name] = "<{0}>\n{1}\n</{0}>".format(name, value)
+        else:
+            values[name] = value
     return values
 
 
@@ -140,10 +174,37 @@ def _context_value(protocol, mode, name, context):
             raise RenderError(
                 "context key {!r} must be a non-empty sequence of strings".format(name)
             )
-        return "\n".join("- " + item.strip() for item in value)
+        items = [_normalize_newlines(item).strip() for item in value]
+        if any(len(item.splitlines()) > 1 for item in items):
+            raise RenderError(
+                "context key {!r} items must each be a single line".format(name)
+            )
+        return items
     if not isinstance(value, str) or not value.strip():
         raise RenderError("context key {!r} must be a non-empty string".format(name))
-    return value.strip()
+    value = _normalize_newlines(value).strip()
+    if name in LABEL_PLACEHOLDERS and (
+        len(value.splitlines()) > 1 or len(value) > MAX_LABEL_PLACEHOLDER_LENGTH
+    ):
+        raise RenderError(
+            "context key {!r} must be a single-line label of at most {} "
+            "characters".format(name, MAX_LABEL_PLACEHOLDER_LENGTH)
+        )
+    if name in DELIMITED_PLACEHOLDERS:
+        lowered = value.lower()
+        for tag in ("<{}>".format(name), "</{}>".format(name)):
+            if tag in lowered:
+                raise RenderError(
+                    "context key {!r} must not contain the delimiter {}".format(
+                        name, tag
+                    )
+                )
+    return value
+
+
+def _normalize_newlines(value):
+    """Convert Windows and old Mac line endings to ``\\n``."""
+    return value.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _examples_section(examples):
@@ -253,18 +314,18 @@ def _number(value):
     return str(value)
 
 
-def _canonical_text(sections):
-    """Join sections with one blank line and end the prompt with one newline."""
-    cleaned = []
-    for section in sections:
-        lines = []
-        for line in section.strip().splitlines():
-            line = line.rstrip()
-            if not line and (not lines or not lines[-1]):
-                continue
-            lines.append(line)
-        while lines and not lines[-1]:
-            lines.pop()
-        if lines:
-            cleaned.append("\n".join(lines))
-    return "\n\n".join(cleaned) + "\n"
+def _canonical_section(section):
+    """Strip trailing spaces and collapse repeated blank lines in protocol text.
+
+    Only protocol and renderer text passes through here; caller context is
+    substituted afterwards and kept verbatim.
+    """
+    lines = []
+    for line in section.strip().splitlines():
+        line = line.rstrip()
+        if not line and (not lines or not lines[-1]):
+            continue
+        lines.append(line)
+    while lines and not lines[-1]:
+        lines.pop()
+    return "\n".join(lines)

@@ -57,16 +57,18 @@ or of interruption counts.
 | `get_protocol(protocol_id)` | Return one immutable protocol. Unknown IDs raise `ProtocolNotFoundError` (a `KeyError`) with close-match suggestions. |
 | `list_protocols(...)` | Filter by `domain`, `task`, `audio_inputs`, `response_mode`, `model_family`, `runner`, and `status`; results are sorted by ID. The default view shows `experimental` and `stable` records only. |
 | `render_protocol(protocol_or_id, mode, context)` | Return a `RenderedPrompt`. |
-| `validate_bank()` | Re-read and validate every bundled record, reporting all errors in one `BankValidationError`. |
-| `validate_response(text, contract)` | Return the reasons a response does not satisfy a contract; an empty list means it does. |
+| `validate_bank()` | Re-read and validate every bundled record, reporting all errors in one `BankValidationError`. The cached bank used by `get_protocol` is left unchanged. |
+| `parse_response(text, contract)` | Return a `ParsedResponse` with `status` (`scored`, `abstained`, or `parse_failed`), the reportable `value`, the frozen JSON `payload`, and `errors`. |
+| `validate_response(text, contract)` | Return the reasons a response does not satisfy a contract; an empty list means it does. It is `parse_response(...).errors` as a list. |
 
 A `RenderedPrompt` carries `text`, `protocol_id`, `protocol_version`, `mode`,
-`protocol_digest`, `rendered_digest`, `bank_schema_version`, and
-`response_schema`. Record those identity fields with any score you keep: a score
-without its protocol is not reproducible.
+`protocol_digest`, `rendered_digest`, `context_digest`, `renderer_version`,
+`bank_schema_version`, and `response_schema`. Record those identity fields with
+any score you keep: a score without its protocol is not reproducible.
 
 `protocol_digest` identifies the protocol, so two renderings with different
-captions share it by design. `rendered_digest` is the SHA-256 of the exact
+captions share it by design. `context_digest` identifies the caller context
+after validation and defaults. `rendered_digest` is the SHA-256 of the exact
 rendered text and is what identifies one evaluation.
 
 Protocol records are frozen dataclasses holding tuples, so a caller cannot
@@ -84,7 +86,7 @@ mutate cached bank state, at any nesting depth.
 identical rubric and a mode comparison varies only the demonstrations.
 
 The renderer owns whitespace, section order, label order, demonstration order,
-and structured-output templates. It generates the response instructions from the
+context delimiters, and structured-output templates. It generates the response instructions from the
 response contract, so a protocol never hand-writes its own JSON template. Every
 rendering ends with exactly one newline and is covered by an exact snapshot test
 in `test/prompt_bank_snapshots.json`.
@@ -101,13 +103,24 @@ Context is validated strictly, before any text is produced:
   `requires_target_instruction` is set, `reference_text` when
   `requires_reference_text` is set. A blank value is rejected.
 - `candidate_a_name` and `candidate_b_name` are optional, default to
-  `Candidate A` and `Candidate B`, and exist only for two-audio protocols.
+  `Candidate A` and `Candidate B`, and exist only for two-audio protocols. They
+  must be single-line labels of at most 40 characters. Keep them opaque: a name
+  such as a system or checkpoint identifier tells the judge which system made
+  each recording and biases the comparison.
 - Unknown keys are rejected, so a misspelling cannot silently change an
   evaluation.
 - `labels` is supplied by the renderer from the response contract and must not
   be passed by a caller.
-- Context values are inserted verbatim. They are never re-interpreted as
-  templates, so a brace inside a caption or instruction is safe.
+- Context values are inserted verbatim, apart from trimming outer whitespace
+  and normalizing line endings to `\n`. They are never re-interpreted as
+  templates, so a brace inside a caption or instruction is safe, and their own
+  blank lines are kept.
+- `reference_text` and `target_instruction` are enclosed in tags named after
+  the placeholder, such as `<reference_text>` ... `</reference_text>`, and the
+  protocol text tells the model that the tagged content is data to evaluate,
+  not instructions. A value containing its own opening or closing tag is
+  rejected. Captions and generation instructions often come from the system
+  under test, so this keeps them from rewriting the rubric.
 
 ```python
 rendered = render_protocol(
@@ -136,12 +149,28 @@ Two rules matter as soon as you keep judged results:
   rendered prompt digest, the resolved context, the judge model and its resolved
   version, the decoding settings, and how the audio was preprocessed.
 
-`validate_response` is strict on purpose: it rejects non-finite numbers,
+`parse_response` is strict on purpose: it rejects non-finite numbers,
 repeated JSON keys, undeclared fields, out-of-range values, and anything
-embedded in prose. It never extracts a number from an explanation.
+embedded in prose or code fences. Integer and scalar answers must be plain ASCII
+numbers, so `1_0` or non-ASCII digits are parse failures rather than `10` or
+`3`. It never extracts a number from an explanation.
 
-The design document specifies the full result envelope and the aggregation
-rules; parsing and reporting arrive with a later increment.
+`value` is `None` for every status except `scored`, so an abstention cannot
+reach an aggregate. A JSON response with `abstain: true` is `abstained` only
+when it carries the sentinel values: every bounded numeric field at its declared
+minimum and every array empty. An abstention that still asserts a rating
+contradicts itself and is `parse_failed`.
+
+```python
+parsed = parse_response(model_output, rendered.response_schema)
+if parsed.status == "scored":
+    scores.append(parsed.value)
+```
+
+For pairwise protocols, run each pair in both presentation orders (a/b and b/a)
+and keep the order with each result. A preference that flips with the order is
+position bias, not a judgment. The design document specifies the full result
+envelope and the aggregation rules.
 
 ## Local and hosted judge models
 
@@ -171,10 +200,16 @@ keep the ID.
 `protocol_digest` is the SHA-256 of a canonical JSON form (UTF-8, recursively
 sorted keys, order-preserving arrays, compact separators) of the
 evaluation-bearing fields only: ID, version, input contract, response contract,
-mode bodies, and model-specific rendering notes. Descriptions, citations, metric
+mode bodies, model-specific rendering notes, and the renderer version.
+Descriptions, citations, metric
 links, status, and runner declarations are excluded. `test/test_prompt_bank.py`
 pins the eight digests so a YAML or JSON library change cannot silently alter
 them.
+
+The renderer contributes text of its own: the response instructions, the
+demonstration block, context tags, and whitespace rules. `RENDERER_VERSION` is
+part of every protocol digest, so any change to renderer output must bump it,
+which changes every digest and every rendering snapshot at once.
 
 A JSON contract's `output_key` must end in `_v<version>`. A deprecated `.v1` and
 its `.v2` successor therefore report under distinct keys and can be run side by
@@ -206,9 +241,9 @@ not replace protocol versioning.
 
 - No metric executes a protocol yet; `prompt_id` support in the Qwen wrappers is
   the next increment, and judge adapters for hosted APIs follow it.
-- Response parsing, provenance envelopes, and report integration are not part of
-  this release. `validate_response` checks a response against a contract but
-  does not parse results into scores.
+- Provenance envelopes and report integration are not part of this release.
+  `parse_response` turns one response into a status and value, but no runner
+  records or aggregates them yet.
 - Audio few-shot examples, dynamic rubrics, and multi-stage judge pipelines are
   out of scope until their licensing, rendering, and validation questions are
   settled.

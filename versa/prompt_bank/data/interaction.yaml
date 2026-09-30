@@ -48,21 +48,16 @@ protocols:
         timestamp evidence that this protocol does not collect.
     model_compatibility:
       - family: qwen2_audio
-
         status: expected
       - family: qwen2_5_omni
-
         status: expected
     runner_compatibility:
       - runner: qwen2_audio
-
         status: planned
         modes: [zero_shot]
       - runner: qwen_omni
-
         status: planned
         modes: [zero_shot]
     metric_links:
       - metric: vad
-
         role: diagnostic
